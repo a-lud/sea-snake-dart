@@ -2,7 +2,8 @@
 title: "Population structure"
 date: "`r Sys.Date()`"
 output: 
-    github_document
+    github_document:
+        toc: true
 ---
 
 This directory contains results relating to diversity statistics, both within
