@@ -1,0 +1,307 @@
+---
+title: "Diversity statistics"
+author: "Alastair Ludington"
+date: "2024-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE, message = FALSE, 
+    warning = FALSE, error = FALSE,
+    out.width = "100%"
+)
+
+suppressPackageStartupMessages({
+    library(snpR)
+    library(tidyverse)
+    library(here)
+    library(gt)
+})
+
+theme_set(theme_bw())
+
+fs::dir_create(path = here("results", "diversity-statistics"))
+```
+
+## Load metadata and VCF files
+
+Here we're simply loading the population-map files and storing them into the
+object `meta`. This object is a list.
+
+```{r load-meta}
+# Load data
+meta <- fs::dir_ls(
+    here("data", "popmaps"),
+    glob = "*.txt"
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |>
+    map(
+        read_delim, 
+        delim = " ", col_names = c("sample", "population"), col_types = cols()
+    )
+```
+
+Next we load the VCF files into `R` and `snpRdata` objects. Similarly, we load
+each species file separately and store it in a list. Some filtering is applied
+which somewhat mirrors what we've already already applied. I'm including it here
+as another approach to filtering a VCF file.
+
+```{r load-vcfs, results='hide'}
+# List VCF files and name vector elements
+vcfs <- fs::dir_ls(
+    here("results", "ipyrad"),
+    glob = "*stringent.vcf.gz",
+    recurse = TRUE
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))()
+
+# Load each VCF file separately (with corresponding metadata)
+vcfs <- imap(vcfs, \(v, i) {
+    tmp_vcf <- read_vcf(
+        file = v, 
+        sample.meta = meta[[i]]
+    )
+    
+    filter_snps(
+        tmp_vcf,
+        remove_garbage = 0.2,
+        min_ind = 0.8,
+        min_loci = 0.8,
+        re_run = TRUE
+    )
+})
+```
+
+## Calculate statistics
+
+Next we'll calculate a range of diversity statistics. The program `snpR` has a
+really convenient function `calc_basic_snp_stats()` which practically estimates
+all the statistics we want.
+
+Below we estimate maf, pi, ho, he, pairwise Fst, Fis, HWE in addition to `Fst`.
+We estimate all statistics by population.
+
+```{r calc-basic-stats}
+# Run calc_basic_snp_stats on each VCF object
+basic_stats <- map(
+    vcfs, 
+    calc_basic_snp_stats, 
+    # Below are aguments to 'calc_basic_snp_stats'
+    facets = "population", fst.method = "WC"
+)
+
+# Get the statistics as list of tables
+basic_stats_list_tables <- map(
+    basic_stats, 
+    get.snpR.stats,
+    facets = "population", 
+    stats = c("pi", "hwe", "ho", "he", "fis", "fst") 
+)
+```
+
+## External calculation of $\pi$: Why invariant data matters
+
+Nucleotide diversity calculated across multiple sites is given by the equation
+below.
+
+$$
+\pi = \frac{1}{L} \sum_{i=1}^{L} \left( \frac{2n_i(n_i-1)}{N(N-1)} \right)
+$$
+
+An important component of this equation is $\frac{1}{L}$. This is the
+reciprocal of the **total** sequence length/number of sites being considered. We
+know that most sites in the genome don't vary - e.g. in humans we have approximately
+**one SNP per kilobase (1kb)**. Below is a schematic showing SNPs along a
+sequence of length 10.
+
+```
+5' -  1 2 3 4 5 6 7 8 9 10 - 3'  Position
+*         *
+5' -  A T A C C G T A A C  - 3'  Seq1
+5' -  A T A G C G T A A C  - 3'  Seq2
+5' -  A T A G C G T A C C  - 3'  Seq3
+5' -  A T A C C G T A A C  - 3'  Seq4
+```
+
+Using the example above, if we considered **only** SNP positions, the length
+would equal 2 ($L = \text{2}$). This is not the actual sequence length, but if
+we only provided variable sites to the equation, the program calculating $\pi$
+wont know that and will simply take the number of variants as the length. As
+the number of variant sites is **much shorter** than the actual length, the
+value of $\pi$ is scaled incorrectly, resulting in a higher estimate due to a
+small value of $L$.
+
+$$
+\pi = \frac{1}{2} \times \frac{7}{6} \approx 0.5833
+$$
+
+- Length ($L$) = 2 (2 variant sites)
+- Total number of differences ($\sum \text{d}_{ij}$) = 7
+- Total number of comparisons $(\frac{4}{2})$ = 6 (1..2, 1..3, 1..4, 2..3 etc...)
+
+Instead, we should calculate length ($L$) using both variant **and** invariant
+sites. The variant sites will still be used to calculate divergence, but the
+combined length is used to properly scale the level of differentiation. Using
+the correct length ($L = \text{10}$) would scale the value of $\pi$ down, resulting
+in a more accurate reflection of divergence within the population.
+
+$$
+\pi = \frac{1}{10} \times \frac{7}{6} \approx 0.1167
+$$
+
+The program `pixy` calculates $\pi$ the second way when given a VCF with both
+variant and invariant data. The authors of `Ipyrad` wrote a script that can
+return an **all-sites** VCF file from the `.loci` files. I've passed that to
+`pixy` to get a more accurate estimation of $\pi$ in each population.
+
+```{r}
+pixy_pi <- fs::dir_ls(
+    here("results"),
+    glob = "*pi.txt",
+    recurse = TRUE
+) |>
+    read_tsv(col_types = cols(), id = "species") |>
+    mutate(species = str_remove(basename(species), "_.*")) |>
+    summarise(
+        pixy_pi = sum(count_diffs)/sum(count_comparisons),
+        .by = c(species, pop)
+    ) |>
+    rename(subfacet = pop)
+```
+
+The $\pi$ estimates are included in the next table.
+
+## Within population statistics
+
+Below we simply extract the weighted averages for each population. The table
+contains four relevant columns - weighted means for nucleotide diversity, 
+observed heterozygosity, expected heterozygosity and `Fis`. I've appended the
+`pixy` $\pi$ estimates so you can compare the impact of calculating nucleotide
+diversity with and without invariant sites.
+
+```{r within-statistics}
+l_ala <- length(unique(meta$ALA$population))
+l_hma <- length(unique(meta$HMA$population))
+l_hst <- length(unique(meta$HST$population))
+
+within <- basic_stats_list_tables |>
+    imap(
+        \(x, i) {
+            x |> 
+                pluck("weighted.means") |> 
+                as_tibble() |> 
+                filter(is.na(weighted_mean_fst)) |>
+                select(-c(snp.facet, snp.subfacet, weighted_mean_fst, mean_fst)) |>
+                left_join(
+                    meta[[i]] |> summarise(n_samples = n(), .by = population),
+                    by = join_by(subfacet == population)
+                )
+            
+        }) |>
+    list_rbind(names_to = "species") |>
+    left_join(pixy_pi)
+
+# Write to file
+within |>
+    (\(x) split(x, x$species))() |>
+    iwalk(\(x, i) {
+        x |>
+            select(
+                species, 
+                population = subfacet, 
+                n_samples, 
+                pixy_pi, 
+                everything(),
+                -facet
+            ) |>
+            write_csv(
+                file = here("results", "diversity-statistics", glue::glue("{i}-within-stats.csv"))
+            )
+    })
+
+# Example of output
+within |>
+    select(subfacet, n_samples, pixy_pi, everything(), -facet) |>
+    gt(groupname_col = "species") |>
+    fmt_number(
+        columns = c(starts_with("weighted_"), "pixy_pi"), 
+        n_sigfig = 3
+    ) |>
+    cols_label(
+        subfacet = ""
+    )
+```
+
+I've left the $\pi$ calculation based on **just SNPs** in the table. We can see
+that the values are much higher than the `pixy` estimations.
+
+# Between population statistics
+
+Lastly we have our $\text{F}_\text{ST}$ measures. I've separated out the upper
+matricies for each of the three species.
+ 
+```{r get-fst}
+# Fst
+# fst_table <- basic_stats_list_tables |>
+#     map(
+#         \(i) 
+#         i |> 
+#             pluck("weighted.means") |> 
+#             as_tibble() |> 
+#             filter(! is.na(weighted_mean_fst)) |>
+#             select(facet, subfacet, weighted_mean_fst, mean_fst)
+#     )
+
+fst_upper_matrix <- basic_stats_list_tables |>
+    map(
+        \(i) 
+        i |> 
+            pluck("fst.matrix") |>
+            pluck("population") |>
+            as_tibble()
+    )
+```
+
+```{r write-fst}
+# Write FST matricies to file
+iwalk(fst_upper_matrix, \(x, i) {
+    x |>
+        write_csv(
+            file = here("results", "diversity-statistics", glue::glue("{i}-fst.csv")),
+            na = ""
+        )
+})
+```
+
+### *Aipysurus laevis*
+
+```{r FST-ALA}
+fst_upper_matrix$ALA |>
+    gt() |>
+    fmt_missing(missing_text = "") |>
+    cols_label(p1 = "") |>
+    fmt_number(n_sigfig = 3)
+```
+
+### *Hydrophis major*
+
+```{r FST-HMA}
+fst_upper_matrix$HMA |>
+    gt() |>
+    fmt_missing(missing_text = "") |>
+    cols_label(p1 = "") |>
+    fmt_number(n_sigfig = 3)
+```
+
+### *Hydrophis stokesii*
+
+```{r}
+fst_upper_matrix$HST |>
+    gt() |>
+    fmt_missing(missing_text = "") |>
+    cols_label(p1 = "") |>
+    fmt_number(n_sigfig = 3)
+```
+
+
