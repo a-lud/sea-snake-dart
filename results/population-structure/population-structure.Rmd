@@ -1,7 +1,9 @@
 ---
 title: "Population structure"
 date: "`r Sys.Date()`"
-output: github_document
+output: 
+    github_document:
+        pandoc_args: ["--strip-comments"]
 ---
 
 This directory contains results relating to diversity statistics, both within
