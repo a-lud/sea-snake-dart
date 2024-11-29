@@ -2,8 +2,7 @@
 title: "Population structure"
 date: "`r Sys.Date()`"
 output: 
-    github_document:
-        pandoc_args: ["--strip-comments"]
+    github_document
 ---
 
 This directory contains results relating to diversity statistics, both within
@@ -246,7 +245,6 @@ etable <- fs::dir_ls(here("results"), glob = "*etable.csv", recurse = TRUE) |>
 
 etable |>
     gt(groupname_col = "species") |>
-    
     fmt_number(
         columns = c("K", "Nreps"),
         drop_trailing_zeros = TRUE
@@ -254,7 +252,8 @@ etable |>
     fmt_number(
         columns = 3:7,
         n_sigfig = 4
-    )
+    ) |>
+    as_raw_html()
 ```
 
 Plotting the table above looks like the following.
