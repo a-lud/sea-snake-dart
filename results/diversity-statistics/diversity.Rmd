@@ -2,7 +2,7 @@
 title: "Diversity statistics"
 date: "`r Sys.Date()`"
 output: 
-    html_document:
+    github_document:
         toc: true
 ---
 
@@ -129,7 +129,6 @@ sequence of length 10.
 
 ```
 5' -  1 2 3 4 5 6 7 8 9 10 - 3'  Position
-            *         *
 5' -  A T A C C G T A A C  - 3'  Seq1
 5' -  A T A G C G T A A C  - 3'  Seq2
 5' -  A T A G C G T A C C  - 3'  Seq3
