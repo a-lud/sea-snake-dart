@@ -6,9 +6,9 @@ output:
         toc: true
 ---
 
-This directory contains results relating to diversity statistics, both within
-and between populations. The script `population-structure.Rmd` renders this
-`README` and is responsible for creating the relevant outputs.
+This directory contains population structure results. The script 
+`population-structure.Rmd` renders this `README` and is responsible for creating
+the relevant outputs.
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(
