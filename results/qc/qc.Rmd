@@ -1,0 +1,104 @@
+---
+title: "Sequence QC"
+date: "`r Sys.Date()`"
+output: 
+    github_document:
+        toc: true
+---
+
+All raw data in this project was run through the same QC pipeline, the steps of
+which are shown below:
+
+1. [BBduk][bbduk]: Remove adapter content/barcodes.
+2. [Kraken2][kraken]: Remove contaminants (human + bacteria)
+3. [Fastp][fastp]: Filter on average quality and minimum length
+4. [MultiQC][multiqc]: Aggregate QC results
+
+Aggregated QC results can be found [here][qchtml] in the `MultiQC` report. For
+a comprehensive look at how samples fared overall (after being processed through
+`Ipyrad`) see [here][resultsipy].
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE, message = FALSE, 
+    warning = FALSE, error = FALSE,
+    fig.height = 10, fig.width = 10, fig.dpi=300,
+    out.width = "100%"
+)
+
+suppressPackageStartupMessages({
+    library(tidyverse)
+    library(patchwork)
+    library(here)
+    library(gt)
+})
+
+theme_set(theme_bw())
+
+meta <- fs::dir_ls(here("data", "sample-sheets"), glob = "*csv") |>
+    map(\(x) {
+        tmp <- x |>
+            read_csv(col_types = cols())
+        if("genus" %in% colnames(tmp)) tmp <- rename(
+            tmp, 
+            Genus = genus,
+            Species = species,
+            Region = region,
+            Country = country
+        )
+        tmp
+    }) |>
+    list_rbind()
+```
+
+```{r raw-data}
+data <- fs::dir_ls(
+    here("results", "qc", "stats"),
+    glob = "*.tsv",
+    recurse = TRUE
+) |>
+    read_tsv(id = "id", col_types = cols()) |>
+    mutate(
+        id = str_remove(basename(id), ".sequence.statistics.tsv"),
+        id = forcats::fct_inorder(id),
+        file = str_remove(file, "\\..*")
+    ) |>
+    left_join(meta, by = join_by(file == id_clean))
+```
+
+## Read counts before/after QC pipeline
+
+The table below shows the number of reads and usable bases before and after
+QC.
+
+```{r}
+data_fmt <- data |>
+    unite(col = "Species", sep = " ", Genus, Species) |>
+    mutate(across(c(id, Species), str_to_sentence)) |>
+    select(id, Species, Region, file, num_seqs, sum_len) |>
+    pivot_wider(names_from = id, values_from = c(num_seqs, sum_len)) |>
+    arrange(Species, Region, -sum_len_Trimmed)
+
+write_csv(data_fmt, file = here("results", "qc", "raw_trimmed_reads_bases.csv"))
+
+    
+data_fmt |>
+    gt(groupname_col = c("Species", "Region"), row_group.sep = ": ") |>
+    fmt_number(use_seps = TRUE, drop_trailing_zeros = TRUE) |>
+    cols_label(
+        file = "",
+        num_seqs_Raw = md("**Reads (raw)**"),
+        num_seqs_Trimmed = md("**Reads (trim)**"),
+        sum_len_Raw = md("**Total bases (raw)**"),
+        sum_len_Trimmed = md("**Total bases (trim)**")
+    ) |>
+    as_raw_html()
+```
+
+
+[bbduk]: https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/
+[kraken]: https://github.com/DerrickWood/kraken2/tree/master
+[fastp]: https://github.com/OpenGene/fastp
+[multiqc]: https://seqera.io/multiqc/
+[qchtml]: https://github.com/a-lud/sea-snake-dart/tree/main/results/qc/multiqc
+[resultsipy]: 
