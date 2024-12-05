@@ -1,0 +1,98 @@
+---
+title: "Sequence QC"
+date: "`r Sys.Date()`"
+output: 
+    github_document:
+        toc: true
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE, message = FALSE, 
+    warning = FALSE, error = FALSE,
+    fig.height = 10, fig.width = 10, fig.dpi=300,
+    out.width = "100%"
+)
+
+suppressPackageStartupMessages({
+    library(tidyverse)
+    library(patchwork)
+    library(here)
+    library(gt)
+})
+
+theme_set(theme_bw())
+
+pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
+    read_delim(
+        delim = " ", 
+        col_names = c("sample", "population"), 
+        col_types = cols(), 
+        id = "species"
+    ) |>
+    mutate(species = str_remove(basename(species), "-.*"))
+```
+
+# Ipyrad summary
+
+```{r}
+stats <- fs::dir_ls("results/ipyrad", glob = "*stats.txt", recurse = TRUE) |>
+    (\(x) set_names(x, str_remove(basename(x), "-stringent_stats.txt")))() |>
+    map(\(x) {
+        lines <- x |>
+            read_lines(skip_empty_rows = TRUE)
+        
+        start <- grep(x = lines, "## Final Sample stats summary") + 1
+        end <- grep(x = lines, "## Alignment matrix statistics:") - 1
+        
+        keep <- lines[start:end]
+        keep <- keep[1] |>
+            trimws(which = "left") |>
+            strsplit(split = " ") |>
+            unlist()
+        colnames <- c("sample", keep[nzchar(keep)])
+        
+        tibble( col = lines[(start + 1):end] ) |>
+            separate(col = col, into = colnames, sep = "\\s+", convert = TRUE) |>
+            select(-state)
+    })
+
+stats |>
+    imap(\(x, i) {
+        x |>
+            write_csv(
+                file = here(
+                    "results", 
+                    "ipyrad", 
+                    glue::glue("{i}-stringent_outfiles"), 
+                    glue::glue("{i}-stringent-stats.csv")
+                )
+            )
+    })
+```
+
+Below is a figuer 
+
+```{r}
+z_data <- stats |>
+    list_rbind(names_to = "Species") |>
+    mutate(Z = scale(loci_in_assembly)[,1], .by = Species)
+
+z_data |>
+    ggplot(aes(x = Z, refseq_mapped_reads, colour = Species)) +
+    geom_point() +
+    geom_vline(xintercept = -2, linetype = "dashed") +
+    scale_x_continuous(
+        breaks = seq(-3, 3, 1),
+        limits = c(-3.5, 3.5)
+    ) +
+    scale_y_continuous(breaks = seq(0, 1.5e6, 2e5)) +
+    ggrepel::geom_label_repel(
+        mapping = aes(label = sample, colour = Species),
+        data = z_data |> filter(Z <= -2),
+        show.legend = FALSE
+    )
+```
+
+
+
