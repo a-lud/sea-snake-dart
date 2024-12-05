@@ -81,7 +81,7 @@ data_fmt <- data |>
 
 write_csv(data_fmt, file = here("results", "qc", "raw_trimmed_reads_bases.csv"))
 
-    
+
 data_fmt |>
     gt(groupname_col = c("Species", "Region"), row_group.sep = ": ") |>
     fmt_number(use_seps = TRUE, drop_trailing_zeros = TRUE) |>
@@ -91,6 +91,10 @@ data_fmt |>
         num_seqs_Trimmed = md("**Reads (trim)**"),
         sum_len_Raw = md("**Total bases (raw)**"),
         sum_len_Trimmed = md("**Total bases (trim)**")
+    ) |>
+    tab_options(
+        container.height = px(500),
+        container.overflow.y = TRUE
     ) |>
     as_raw_html()
 ```
