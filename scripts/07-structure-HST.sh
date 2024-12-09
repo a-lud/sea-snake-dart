@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=structure-HST
+#SBATCH --job-name=structure-HST-refined
 #SBATCH -p icelake
 #SBATCH -N 1
 #SBATCH -n 1
@@ -11,16 +11,19 @@
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alastair.ludington@adelaide.edu.au
 
-DIR='/home/a1645424/hpcfs/analysis/shannon/results/ipyrad/HST-stringent_outfiles'
-mkdir -p "${DIR}/structure"
+HDF5='/home/a1645424/hpcfs/analysis/shannon/results/ipyrad/HST-stringent_outfiles'
+WD='/home/a1645424/hpcfs/analysis/shannon/results/population-structure/structure'
+mkdir -p "${WD}"
 
 # Copy required data and files to working directory
-cp structure-HST.py "${DIR}/structure"
-cp "${DIR}/HST-stringent.highQ.filtered.LD50k.snps.hdf5" "${DIR}/structure"
-cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/HST-popmap.txt "${DIR}/structure"
+cp structure-HST.py "${WD}"
+cp "${HDF5}/HST-stringent.highQ.filtered.LD50k.snps.hdf5" "${WD}"
+cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/HST-popmap.txt "${WD}"
+cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/dropped-samples.tsv "${WD}"
+cp "${WD}/../HST-ignore.txt" "${WD}"
 
 # Change into working directory
-cd "${DIR}/structure" || exit 1
+cd "${WD}" || exit 1
 
 source '/hpcfs/users/a1645424/micromamba/etc/profile.d/micromamba.sh'
 micromamba activate ipyrad
@@ -32,5 +35,6 @@ sleep 60
 python structure-HST.py
 
 ipcluster stop
+ipcluster clean
 
 micromamba deactivate

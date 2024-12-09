@@ -35,14 +35,19 @@ pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
         id = "species"
     ) |>
     mutate(species = str_remove(basename(species), "-.*"))
+
+ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
+    read_tsv(
+        col_names = "population"
+    ) |>
+    distinct() |>
+    pull()
 ```
 
 ## Helper functions
 
-The first helper function parses `STRUCTURE` output files into dataframes which
-we can work with. 
-
-```{r helper-function-structure}
+```{r helper-function-structure, echo=FALSE}
+# No longer need this
 readStructure <- function(path) {
     k <- as.numeric(sub(".+-(.*)", "\\1", str_remove(basename(path), "\\..*") ))
     kpops <- paste0("k", 1:k)
@@ -62,8 +67,8 @@ readStructure <- function(path) {
 }
 ```
 
-The second helper function is simply for generating the PCAs. It handles finding
-`x` and `y` maxima/minima and formatting.
+This helper function is for generating the PCAs. It handles finding `x` and `y`
+maxima/minima and formatting.
 
 ```{r helper-function-plotting}
 # Function that takes the PCA list we'll generate below and plot the desired PCs
@@ -95,7 +100,7 @@ plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Pa
         ceiling()
     
     sp_pca |>
-        ggplot(aes(x = .data[[pcA]], y = .data[[pcB]], colour = population)) +
+        ggplot(aes(x = .data[[pcA]], y = .data[[pcB]], colour = population, text = sample)) +
         geom_point(size = 2) +
         scale_color_brewer(palette = pal) +
         labs(title = glue::glue("{pcA} vs {pcB}")) +
@@ -121,14 +126,20 @@ plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Pa
 }
 ```
 
+# Removed samples
+
+A range of samples were excluded from the PCAs below. Further numerous populations
+were ignored when running `STRUCTURE`. These can be found in the following files
+
+- [dropped-samples.tsv][dropped]
+- Per-species populations to ignore ([here][ignore])
+
 ## PCA
 
 Principal component analysis (PCA) was conducted using the [Ipyrad analysis toolkit][ipatools].
 The code responsible for the CSV files we're loading in below can be found
-[here][pcaipynb]. Below, we're simply creating custom figures.
-
-Below we're loading the CSV files as a list of dataframes and adapting the
-column names slightly.
+[here][pcaipynb]. Below, we're simply creating custom figures. We generate PCAs
+for **all** samples across all populations for each species.
 
 ```{r}
 lst_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
@@ -207,23 +218,44 @@ pc_1_2 + pc_1_3 + pc_2_3 + guide_area() +
 
 ## STRUCTURE
 
-Next, we generate the `STRUCTURE` plots for each species. We first read in each
-output file as a dataframe, combining the results into a single long-format
-tibble.
+`STRUCTURE` plots are then generated for WA populations, specifically: Broome,
+Pilbara, Exmouth Gulf, Shark Bay and North Kimberley. In the PCAs above, samples
+from these populations typically cluster together, showing little structure.
+Consequently, we're using this method as a more granular approach to determine
+if there is any allele sharing between the populations.
 
 ```{r read-structure}
-pops_structure <- pops |> mutate(i1 = row_number(), .by = species)
+structure_pops <- unique(pops$population)[ ! unique(pops$population) %in% ignore ]
+
+# Custom ordering of colour palette
+pal <- c(
+    "#8da0cb", "#66c2a5", "#fc8d62", 
+    "#e78ac3", "#a6d854", "#ffd92f", 
+    "#f0ad4e", "#d9534f", "#5cb85c"
+)
+names(pal) <- 1:9
 
 structure_df <- fs::dir_ls(
-    here("results", "population-structure"), 
-    glob = "*clumpp.outfile", 
+    here("results", "population-structure", "structure"), 
+    glob = "*plot.csv", 
     recurse = TRUE
 ) |>
-    (\(x) set_names(x, str_remove(basename(x), "\\..*")))() |>
-    map(readStructure) |>
-    list_rbind(names_to = "species") |>
-    separate_wider_delim(delim = "-", names = c("species", "K"), too_many = "merge", cols = species) |>
-    left_join(pops_structure)
+    map(\(x) {
+        tmp <- x |>
+            read_csv(col_names = TRUE, col_types = cols())
+        tmp |>
+            mutate(K = glue::glue("K{ncol(tmp) - 1}")) |>
+            pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
+            mutate(partition = as.numeric(partition) + 1) |>
+            rename(sample = `...1`) |>
+            left_join(pops)
+    }) |>
+    list_rbind() |>
+    mutate(
+        partition = forcats::fct_inorder(as.character(partition)), 
+        population = factor(population, levels = structure_pops),
+        .by = K
+    )
 ```
 
 ### Choosing the correct K (N-ancestral populations)
@@ -234,12 +266,16 @@ can be interpreted as follows:
 
 - **Estimated log-probability**: Higher values equal better model fit.
 - **Delta-K**: The rate of change between successive K-values. Larger values
-indicate reater change in the model fit.
+indicate greater change in the model fit.
 
 The results for the three species are shown below.
 
 ```{r}
-etable <- fs::dir_ls(here("results"), glob = "*etable.csv", recurse = TRUE) |>
+etable <- fs::dir_ls(
+    here("results", "population-structure", "structure"), 
+    glob = "*etable.csv",
+    recurse = TRUE
+) |>
     read_csv(col_names = TRUE, col_types = cols(), id = "species") |>
     mutate(species = str_remove(basename(species), "-etable.csv")) |>
     rename(K = `...1`)
@@ -267,7 +303,7 @@ prb <- etable |>
     scale_y_continuous(
         name = "Estimated mean log-probability",
         breaks = seq(0, -105000, -10000),
-        limits = c(-105e3, -4e4),
+        limits = c(-105e3, -3e4),
         labels = scales::label_number(style_negative = "minus")
     ) +
     scale_x_continuous(breaks = seq(2, 9, 1))
@@ -279,101 +315,271 @@ dk <- etable |>
     scale_x_continuous(breaks = seq(2, 9, 1)) +
     scale_y_continuous(
         name = "Delta-K",
-        breaks = seq(0, 8, 1)
+        breaks = seq(0, 15, 1)
     )
 
 prb/dk +
     plot_layout(axes = "collect", guides = "collect")
 ```
 
+Estimated mean log probabilities are relatively consistent across the first four
+to six K-values in each population, before starting to dip. Delta-K values vary
+quite a bit for *H. major*, in the lower K-values, while *A. laevis* and *H. stokesii*
+peak at `K = 7`. The issue is that the estimated log probabilities don't really
+improve that much for the increasing K, meaning the delta-K peaks are likely a
+product of over-fitting.
+
 ### *Aipysurus laevis*
 
-The two highest log-probability values are at `k = 5` and `K = 7`. The Delta-K
-for both of these values is quite high, indicating that both K-values improved
-the model fit substantially.
+The figure below plots all tested population k-values (rows). As is expected
+based on the log-probability + delta-k figure above, adding populations doesn't
+really seem to do much, as the additional populations have minute contributions
+overall.
+
+As such, a conservative approach using a lower K-value (i.e. fewer populations)
+is likely the play.
 
 ```{r}
 structure_df |>
-    filter(species == "ALA", K == "K-5") |>
-    ggplot(aes(x = sample, y = proportion, fill = `k-value`)) +
+    filter(species == "ALA") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
-    scale_fill_brewer(palette = "Set2") +
-    scale_y_continuous(expand = c(0, 0)) +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        limits = c(0, 1),
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
     labs(x = NULL) + 
     facet_grid(
-        cols = vars(population), scales = "free_x", space = "free_x"
-        
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
     ) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
+        axis.title.y = element_blank(),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        strip.text = element_text(angle = 90, vjust = 0.5, hjust = 0.1),
-        strip.background = element_blank(),
         legend.position = "bottom",
         legend.title = element_text(hjust = 0.5),
-        panel.spacing.x = unit(0.2, "line")
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.5,
+            size = 14
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+```
+
+Below is the figure for `K = 2` and `K = 3`. Even adding an additional population
+(`K = 3`) seems to be over-fitting.
+
+```{r}
+structure_df |>
+    filter(species == "ALA", K %in% c("K2", "K3")) |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        limits = c(0, 1),
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    facet_grid(
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
+    ) +
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.5,
+            size = 14
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
     )
 ```
 
 ### *Hydrophis major*
 
-`K = 5` appears to be the best choice for *H. major*. The estimated log-probability
-is relatively stable for most values of `K`, before dipping once reaching higher
-values. Delta-K peaks at `K = 5`, with little improvement after.
+Here, we do the same for *H. major*.
 
 ```{r}
 structure_df |>
-    filter(species == "HMA", K == "K-5") |>
-    ggplot(aes(x = sample, y = proportion, fill = `k-value`)) +
+    filter(species == "HMA") |> 
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
-    scale_fill_brewer(palette = "Set2") +
-    scale_y_continuous(expand = c(0, 0)) +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
     labs(x = NULL) + 
     facet_grid(
-        cols = vars(population), scales = "free_x", space = "free_x"
-        
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
     ) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
+        axis.title.y = element_blank(),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        strip.text = element_text(angle = 90, vjust = 0.5, hjust = 0.1),
-        strip.background = element_blank(),
         legend.position = "bottom",
         legend.title = element_text(hjust = 0.5),
-        panel.spacing.x = unit(0.2, "line")
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.5,
+            size = 14
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+```
+
+And again plot the first few K-increments. There does look to be a bit of
+variability in the Shark Bay samples when `K = 3`, so perhaps a higher K-value
+is warranted. However, K-values of 4 and 5 appear to be over fitting.
+
+```{r}
+structure_df |>
+    filter(species == "HMA", K %in% c("K2", "K3", "K4", "K5")) |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    facet_grid(
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
+    ) +
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.5,
+            size = 14
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
     )
 ```
 
 ### *Hydrophis stokesii*
 
-The estimated log-probabilities for *stokesii* show a similar pattern to *H. major*,
-being consistent across multiple `K` values. Delta-K spikes at `K = 4`, indicating
-that this is likely the best value for the current dataset.
+Lastly, we do the same for *H. stokesii*.
 
 ```{r}
 structure_df |>
-    filter(species == "HST", K == "K-4") |>
-    ggplot(aes(x = sample, y = proportion, fill = `k-value`)) +
+    filter(species == "HST") |> 
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
-    scale_fill_brewer(palette = "Set2") +
-    scale_y_continuous(expand = c(0, 0)) +
-    labs(x = NULL) +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
     facet_grid(
-        cols = vars(population), scales = "free_x", space = "free_x"
-        
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
     ) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
+        axis.title.y = element_blank(),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        strip.text = element_text(angle = 90, vjust = 0.5, hjust = 0.1),
-        strip.background = element_blank(),
         legend.position = "bottom",
         legend.title = element_text(hjust = 0.5),
-        panel.spacing.x = unit(0.2, "line")
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
     )
 ```
 
+Similar to the other species, these snakes appear to be a homogeneous population
+in the WA region, as `K = 3` appears to simply be fractioning the starting populations.
+
+```{r}
+structure_df |>
+    filter(species == "HST", K %in% c("K2", "K3")) |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    facet_grid(
+        rows = vars(K), cols = vars(population),
+        scales = "free_x",
+        space = "free_x"
+    ) +
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.2, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+```
 
 [ipatools]: https://ipyrad.readthedocs.io/en/master/API-analysis/index.html
 [pcaipynb]: https://github.com/a-lud/sea-snake-dart/blob/main/scripts/06-pca.ipynb
-
+[dropped]: 
+[ignore]: 

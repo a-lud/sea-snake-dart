@@ -2,7 +2,7 @@ HMA-Dm001-3991498 Gulf_of_Carpentaria
 HMA-Dm004-3991499 Gulf_of_Carpentaria
 HMA-Dm005-3991500 Gulf_of_Carpentaria
 HMA-Dm007-3991501 Gulf_of_Carpentaria
-HMA-Dm008-3991502 Weipa
+HMA-Dm008-3991502 Gulf_of_Carpentaria
 HMA-Dm010-3991503 Gulf_of_Carpentaria
 HMA-Dm011-3991504 Gulf_of_Carpentaria
 HMA-Dm014-3991505 Gulf_of_Carpentaria
@@ -48,7 +48,7 @@ HMA-KLS1416-3593319 Broome
 HMA-KLS1421-3593374 Broome
 HMA-KLS1514-3593378 Pilbara
 HMA-KLS1522-3593369 Pilbara
-HMA-KLS1538-3593349 Gulf_of_Carpentaria
+HMA-KLS1538-3593349 Pilbara
 HMA-KLS1553-3593325 Pilbara
 HMA-KLS1554-3593316 Pilbara
 HMA-MAGNT-R36643-2117742 Gulf_of_Carpentaria

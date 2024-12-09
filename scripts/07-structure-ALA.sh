@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=structure-ALA
+#SBATCH --job-name=structure-ALA-refined
 #SBATCH -p icelake
 #SBATCH -N 1
 #SBATCH -n 1
@@ -11,16 +11,19 @@
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alastair.ludington@adelaide.edu.au
 
-DIR='/home/a1645424/hpcfs/analysis/shannon/results/ipyrad/ALA-stringent_outfiles'
-mkdir -p "${DIR}/structure"
+HDF5='/home/a1645424/hpcfs/analysis/shannon/results/ipyrad/ALA-stringent_outfiles'
+WD='/home/a1645424/hpcfs/analysis/shannon/results/population-structure/structure'
+mkdir -p "${WD}"
 
 # Copy required data and files to working directory
-cp structure-ALA.py "${DIR}/structure"
-cp "${DIR}/ALA-stringent.highQ.filtered.LD50k.snps.hdf5" "${DIR}/structure"
-cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/ALA-popmap.txt "${DIR}/structure"
+cp structure-ALA.py "${WD}"
+cp "${HDF5}/ALA-stringent.highQ.filtered.LD50k.snps.hdf5" "${WD}"
+cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/ALA-popmap.txt "${WD}"
+cp /home/a1645424/hpcfs/analysis/shannon/data/popmaps/dropped-samples.tsv "${WD}"
+cp "${WD}/../ALA-ignore.txt" "${WD}"
 
 # Change into working directory
-cd "${DIR}/structure" || exit 1
+cd "${WD}" || exit 1
 
 source '/hpcfs/users/a1645424/micromamba/etc/profile.d/micromamba.sh'
 micromamba activate ipyrad
@@ -32,5 +35,6 @@ sleep 60
 python structure-ALA.py
 
 ipcluster stop
+ipcluster clean
 
 micromamba deactivate

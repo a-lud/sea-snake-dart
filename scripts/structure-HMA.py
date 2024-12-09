@@ -13,8 +13,39 @@ from pandas import read_csv
 ipyclient = ipp.Client(cluster_id="ipyrad_HMA")
 
 # Files/paths
+probs = "dropped-samples.tsv"
 data = "HMA-stringent.highQ.filtered.LD50k.snps.hdf5"
 popmap = "HMA-popmap.txt"
+ign = "HMA-ignore.txt"
+
+# Problem samples
+problems = read_csv(
+    probs,
+    sep = "\t",
+    comment="#",
+    names = ["sample", "population"]
+)
+problems = dict(problems.groupby("population")["sample"].apply(list))
+
+with open(ign) as f:
+    ignore = f.read().splitlines()
+
+# Accessory function for dropping samples
+def drop_samples(probs: dict, pop_dict: dict) -> dict:
+    for k,v in probs.items():
+        if k in pop_dict.keys():
+            for sample in v:
+                if sample in pop_dict[k]:
+                    print(f"Dropping: {sample}")
+                    pop_dict[k].remove(sample)
+    return pop_dict
+    
+def drop_pop(drop_list: list, pop_dict: dict) -> dict:
+    for p in drop_list:
+        if p in pop_dict.keys():
+            print(f"Dropping: {p}")
+            pop_dict.pop(p)
+    return(pop_dict)
 
 # Burnin/nreps
 burnin = 100000
@@ -25,6 +56,8 @@ populations = read_csv(popmap, comment="#", sep=" ", names=["sample", "grouping"
 
 # Convert to dictionary
 imap = dict(populations.groupby("grouping")["sample"].apply(list))
+imap = drop_samples(probs=problems, pop_dict=imap)
+imap = drop_pop(drop_list=ignore, pop_dict=imap)
 
 # 50% missing data per population group
 minmap = {i: 0.5 for i in imap}
@@ -65,7 +98,7 @@ axes.x.ticks.locator = toyplot.locator.Explicit(range(len(etable.index)), etable
 axes.x.label.text = "K (N ancestral populations)"
 
 # Save figure
-toyplot.png.render(canvas, f"/HMA-deltaK-burnin_{burnin}-numreps_{numreps}.png")
+toyplot.png.render(canvas, f"HMA-deltaK-burnin_{burnin}-numreps_{numreps}.png")
 
 for i in range(2, 9):
     table = struct.get_clumpp_table(i)
@@ -91,5 +124,5 @@ for i in range(2, 9):
     axes.x.ticks.labels.style = {"font-size": "12px"}
 
     toyplot.png.render(
-        canvas, f"/HMA-structure-k{i}-burnin_{burnin}-numreps_{numreps}.png"
+        canvas, f"HMA-structure-k{i}-burnin_{burnin}-numreps_{numreps}.png"
     )
