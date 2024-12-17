@@ -42,6 +42,21 @@ ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
     ) |>
     distinct() |>
     pull()
+
+meta <- fs::dir_ls(here("data", "sample-sheets"), glob = "*csv") |>
+    map(\(x) {
+        tmp <- x |>
+            read_csv(col_types = cols())
+        if("genus" %in% colnames(tmp)) tmp <- rename(
+            tmp, 
+            Genus = genus,
+            Species = species,
+            Region = region,
+            Country = country
+        )
+        tmp
+    }) |>
+    list_rbind()
 ```
 
 ## Helper functions
@@ -73,7 +88,7 @@ maxima/minima and formatting.
 ```{r helper-function-plotting}
 # Function that takes the PCA list we'll generate below and plot the desired PCs
 # for the specified population
-plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Paired") {
+plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Spectral") {
     sp_pca <- pca_list |>
         pluck(species)
     
@@ -100,7 +115,7 @@ plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Pa
         ceiling()
     
     sp_pca |>
-        ggplot(aes(x = .data[[pcA]], y = .data[[pcB]], colour = population, text = sample)) +
+        ggplot(aes(x = .data[[pcA]], y = .data[[pcB]], shape = population, colour = order, text = sample)) +
         geom_point(size = 2) +
         scale_color_brewer(palette = pal) +
         labs(title = glue::glue("{pcA} vs {pcB}")) +
@@ -152,7 +167,8 @@ lst_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.
         colnames(tmp) <- c("sample", paste0("PC", 1:(ncol(tmp) - 1)))
         pops |>
             filter(species == i) |>
-            left_join(tmp)
+            left_join(tmp) |>
+            left_join(meta, by = join_by(sample == id_clean))
     })
 ```
 

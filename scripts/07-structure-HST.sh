@@ -3,9 +3,9 @@
 #SBATCH -p icelake
 #SBATCH -N 1
 #SBATCH -n 1
-#SBATCH -c 32
+#SBATCH -c 40
 #SBATCH --ntasks-per-core=2
-#SBATCH --time=10:00:00
+#SBATCH --time=20:00:00
 #SBATCH --mem=20GB
 #SBATCH -o ./joblogs/structure/%x_%j.log
 #SBATCH --mail-type=FAIL

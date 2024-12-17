@@ -29,6 +29,163 @@ theme_set(theme_bw())
 fs::dir_create(path = here("results", "diversity-statistics"))
 ```
 
+## Accessory function
+
+The standard `calc_genetic_distance()` function from `snpR` doesn't remove missing
+data when using the `Nei` method (it does when using the `Edwards` method). As
+such, the code below is taken from the `snpR` package, with one additional line
+added to the `.get_dist()` function.
+```{r}
+al_calc_genetic_distances <- function(x, facets = NULL, method = "Edwards", interpolate = "bernoulli"){
+    #============sanity checks=========
+    msg <- character()
+    
+    if(!is.snpRdata(x)){
+        stop("x is not a snpRdata object.\n")
+    }
+    
+    good.methods <- c("Edwards", "Nei")
+    if(!method %in% good.methods){
+        msg <- c(msg, paste0("Provided method not supported. Supported methods: ", paste0(good.methods, collapse = " ")))
+    }
+    
+    # get the allele frequencies if not already provided
+    facets <- snpR:::.check.snpR.facet.request(x, facets, "none", T)
+    snp_lev <- which(facets[[2]] == "snp" | facets[[2]] == ".base")
+    snp_facets <- facets[[1]][snp_lev]
+    all_facets <- facets[[1]]
+    
+    # pull out snp level facets, since these'll be done later.
+    if(length(snp_lev) != length(facets[[1]])){
+        if(length(snp_lev) > 0){
+            facets <- facets[[1]][-snp_lev]
+        }
+        else{
+            facets <- facets[[1]]
+        }
+        needed.facets <- snpR:::.check_calced_stats(x, facets, "allele_frequency_matrix")
+        needed.facets <- facets[which(!unlist(needed.facets))]
+        if(length(needed.facets) > 0){
+            x <- tabulate_allele_frequency_matrix(x, needed.facets)
+        }
+        sample_facets_detected <- T
+    }
+    else{
+        sample_facets_detected <- F
+    }
+    
+    if(length(msg) > 0){
+        stop(paste0(msg, collapse = "\n"))
+    }
+    
+    # grab the data we are working with for sample specific facets
+    y <- x
+    if(sample_facets_detected){
+        x <- snpR:::.get.snpR.stats(y, facets, "allele_frequency_matrix")
+    }
+    
+    #=============run for facets with sample aggregation===============
+    if(sample_facets_detected){
+        out <- vector("list", length(x))
+        names(out) <- names(x)
+        # enter lapply hell--first level unlists once, second level runs the function if the values are matrices, unlists if not, third level can always run the function
+        # the nice thing with this is that it should keep all of the names from x natively!
+        out <- lapply(x, function(y){
+            lapply(y, function(z) {
+                if(is.matrix(z)){
+                    al_get_dist(z, method = method)
+                }
+                else{
+                    lapply(z, al_get_dist, method = method)
+                }
+            })
+        })
+    }
+    
+    # #============run for facets without sample aggregation (snp or .base level)
+    if(length(snp_facets) > 0){
+        # intialize output and get sn
+        out_snp <- vector("list", length(snp_facets))
+        names(out_snp) <- snp_facets
+        sn <- format_snps(y, "sn", interpolate = interpolate)
+        sn <- sn[,-c(1:(ncol(y@snp.meta) - 1))]
+        
+        # for each snp facet...
+        for(i in 1:length(snp_facets)){
+            if(snp_facets[i] == ".base"){
+                out_snp[[i]] <- vector("list", 1)
+                names(out_snp[[i]]) <- ".base"
+                out_snp[[i]][[1]] <- list(stats::dist(t(sn)))
+                names(out_snp[[i]][[1]]) <- method
+                
+            }
+            else{
+                # get tasks
+                tasks <- .get.task.list(y, snp_facets[i])
+                out_snp[[i]] <- vector("list", nrow(tasks))
+                names(out_snp[[i]]) <- tasks[,4]
+                snp_columns <- unlist(.split.facet(tasks[,3][1]))
+                
+                # run the tasks
+                for(j in 1:nrow(tasks)){
+                    t_snp_cols <- y@snp.meta[,snp_columns, drop = F]
+                    t_snp_indices <- snpR:::.paste.by.facet(t_snp_cols, snp_columns, sep = "    ")
+                    t_snp_indices <- which(t_snp_indices %in% tasks[j,4])
+                    out_snp[[i]][[j]] <- list(stats::dist(t(sn[t_snp_indices,])))
+                    names(out_snp[[i]][[j]]) <- method
+                }
+            }
+            
+        }
+    }
+    
+    #============return=========
+    if(exists("out") & exists("out_snp")){
+        out <- c(out, out_snp)
+    }
+    else if(exists("out_snp")){
+        out <- out_snp
+    }
+    
+    y <- snpR:::.update_calced_stats(y, all_facets, paste0("genetic_distance_", method, "_", interpolate))
+    if(method == "Edwards"){
+        y <- snpR:::.update_citations(y, "Edwards1971", "genetic_distance", "Edwards' Angular Genetic Distance")
+    }
+    else if(method == "Nei"){
+        y <- snpR:::.update_citations(y, "Nei1978", "genetic_distance", "Nei's genetic distance")
+    }
+    return(snpR:::.merge.snpR.stats(y, out, "genetic_distances"))
+}
+
+al_get_dist <- function(x, method = "Edwards"){
+    #browser()
+    if(method == "Edwards"){
+        x <- x[,which(colSums(is.na(x)) == 0)] # remove anywhere where there is missing data!
+        nloc <- ncol(x)
+        x <- sqrt(as.matrix(x))
+        am <- x%*%t(x)
+        am <- 1 - (am / (nloc/2)) # can produce negative values, meaning an NaN distance measure
+        diag(am) <- 0
+        suppressWarnings(am <- sqrt(am))
+        am <- stats::as.dist(am)
+    }
+    else if(method == "Nei"){
+        # ADDED: Remove missing data (taken from above)
+        x <- x[,which(colSums(is.na(x)) == 0)]
+        d <- x %*% t(x)
+        vec <- sqrt(diag(d))
+        d <- d/vec[col(d)]
+        d <- d/vec[row(d)]
+        d <- -log(d)
+        am <- stats::as.dist(d)
+    }
+    am <- list(am)
+    names(am) <- method
+    return(am)
+}
+```
+
+
 ## Load metadata and VCF files
 
 Here we're simply loading the population-map files and storing them into the
@@ -110,6 +267,23 @@ basic_stats_list_tables <- map(
     facets = "population", 
     stats = c("pi", "hwe", "ho", "he", "fis", "fst") 
 )
+
+# Genetic distance
+between_distance <- map(
+    vcfs,
+    al_calc_genetic_distances,
+    facets = "population",
+    method = "Nei"
+)
+
+between_distance_list_tables <- map(
+    between_distance,
+    get.snpR.stats,
+    facets = "population", 
+    stats = "genetic_distance"
+)
+
+
 ```
 
 ## External calculation of $\pi$: Why invariant data matters
@@ -252,8 +426,18 @@ that the values are much higher than the `pixy` estimations.
 
 Lastly we have our $\text{F}_\text{ST}$ measures. I've separated out the upper
 matricies for each of the three species.
- 
+
 ```{r get-fst}
+# nei_distance_matrix 
+nei_dist_matrix <- between_distance_list_tables |>
+    map(
+        \(i)
+        i |>
+            pluck("population") |>
+            pluck(".base") |>
+            pluck("Nei")
+)
+
 fst_upper_matrix <- basic_stats_list_tables |>
     map(
         \(i) 
