@@ -61,36 +61,21 @@ meta <- fs::dir_ls(here("data", "sample-sheets"), glob = "*csv") |>
 
 ## Helper functions
 
-```{r helper-function-structure, echo=FALSE}
-# No longer need this
-readStructure <- function(path) {
-    k <- as.numeric(sub(".+-(.*)", "\\1", str_remove(basename(path), "\\..*") ))
-    kpops <- paste0("k", 1:k)
-    read_lines(path) |>
-        str_remove("^\\s+") |>
-        str_remove("\\s+$") |>
-        str_remove(": ") |>
-        str_replace_all("\\s+", "\t") |>
-        as_tibble() |>
-        separate(col = value, into = c("i1", "i2", "i3", "i4", kpops), sep = "\t") |>
-        select(i1, starts_with("k")) |>
-        pivot_longer(names_to = "k-value", values_to = "proportion", starts_with("k")) |>
-        mutate(
-            proportion = as.numeric(proportion),
-            i1 = as.numeric(i1)
-        )
-}
-```
-
 This helper function is for generating the PCAs. It handles finding `x` and `y`
 maxima/minima and formatting.
 
 ```{r helper-function-plotting}
 # Function that takes the PCA list we'll generate below and plot the desired PCs
 # for the specified population
-plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Spectral") {
-    sp_pca <- pca_list |>
-        pluck(species)
+plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, xstep = 1, ystep = 1, pal = "Spectral") {
+    full_species <- set_names(c("ALA", "HMA", "HST"), c("Aipysurus laevis", "Hydrophis major", "Hydrophis stokesii"))
+    plot_title <- names(full_species[full_species == spec])
+    
+    sp_pca <- pca_dataframe |>
+        filter(species == spec, WA == WA_only)
+    
+    sp_var <- variance_dataframe |>
+        filter(species == spec, WA == WA_only)
     
     # x-axis: max/min
     xmin <- sp_pca |>
@@ -114,11 +99,34 @@ plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Sp
         max(na.rm = TRUE) |>
         ceiling()
     
+    # Variance strings
+    pcA_var <- round(
+        sp_var |>
+            filter(pc_axes == pcA) |>
+            pull(variance) * 100, digits = 2
+    )
+    
+    pcB_var <- round(
+        sp_var |>
+            filter(pc_axes == pcB) |>
+            pull(variance) * 100, digits = 2
+    )
+    
     sp_pca |>
-        ggplot(aes(x = .data[[pcA]], y = .data[[pcB]], shape = population, colour = order, text = sample)) +
-        geom_point(size = 2) +
-        scale_color_brewer(palette = pal) +
-        labs(title = glue::glue("{pcA} vs {pcB}")) +
+        ggplot(
+            aes(
+                x = .data[[pcA]], y = .data[[pcB]],
+                colour = population
+            )
+        ) +
+        geom_point(size = 2.5, show.legend=TRUE) +
+        scale_colour_manual(values = pal, drop = FALSE) +
+        labs(
+            title = glue::glue("{plot_title}"),
+            colour = "Population",
+            x = glue::glue("{pcA} ({pcA_var}%)"),
+            y = glue::glue("{pcB} ({pcB_var}%)")
+        ) +
         scale_y_continuous(
             limits = c(ymin, ymax),
             breaks = seq(ymin, ymax, by = ystep),
@@ -132,11 +140,13 @@ plotPCA <- function(pca_list, species, pcA, pcB, xstep = 1, ystep = 1, pal = "Sp
             expand = c(0, 0)
         ) +
         theme(
+            axis.text = element_text(size = 14),
+            axis.title = element_text(size = 14),
             legend.position = "bottom",
-            legend.title = element_text(hjust = 0.5, face = "bold", size = 14),
+            legend.title = element_text(hjust = 0.5, size = 14),
             legend.title.position = "top",
-            plot.title = element_text(hjust = 0.5),
-            title = element_text(face = "bold")
+            legend.text = element_text(size = 14),
+            plot.title = element_text(hjust = 0.5, face = "bold.italic")
         )
 }
 ```
@@ -156,81 +166,101 @@ The code responsible for the CSV files we're loading in below can be found
 [here][pcaipynb]. Below, we're simply creating custom figures. We generate PCAs
 for **all** samples across all populations for each species.
 
-```{r}
-lst_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
-    # For each vector element, we're setting the basename of the file as its name
-    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |>
-    # Read the contents of each CSV and set the column names to PC... 
+```{r load-pca-data}
+# PCA dataframes
+df_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
+    (\(x) x[!str_detect(x, "variance")])() |>
     imap(\(x, i) {
+        fname <- str_remove(basename(i), ".csv")
+        spec <- str_remove(fname, "-.*")
+        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
+        
         tmp <- x |>
             read_csv(col_names = TRUE, col_types = cols())
         colnames(tmp) <- c("sample", paste0("PC", 1:(ncol(tmp) - 1)))
         pops |>
-            filter(species == i) |>
-            left_join(tmp) |>
-            left_join(meta, by = join_by(sample == id_clean))
-    })
+            filter(species == spec) |>
+            inner_join(tmp) |>
+            inner_join(meta, by = join_by(sample == id_clean)) |>
+            mutate(WA = wa, .after = species)
+    }) |>
+    list_rbind() |>
+    select(species, WA, sample, population, PC1, PC2, PC3) |>
+    mutate(population = forcats::fct_inorder(population))
+
+# Variance dataframes
+df_variance <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*variance.csv") |>
+    imap(\(x, i) {
+        fname <- str_remove(basename(i), ".csv")
+        spec <- str_remove(fname, "-.*")
+        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
+        x |>
+            read_csv(
+                skip = 1,
+                col_names = c("pc_axes", "variance"),
+                col_types = cols()
+            ) |>
+            mutate(
+                species = spec,
+                WA = wa,
+                pc_axes = pc_axes + 1,
+                pc_axes = paste0("PC", pc_axes)
+            ) |>
+            filter(pc_axes %in% c("PC1", "PC2", "PC3"))
+    }) |>
+    list_rbind()
 ```
 
-### *Aipysurus laevis*
+```{r get-legend}
+# Custom ordering of colour palette
+pal_PCA <- c(
+    "#8da0cb", "#66c2a5", "#fc8d62", 
+    "#e78ac3", "#a6d854", "#ffd92f", 
+    "#f0ad4e", "#d9534f", "#5cb85c",
+    "#66C2A5", "#FC8D62", "#8DA0CB",
+    "#B3B3B3"
+)
+names(pal_PCA) <- levels(df_pca$population)
+```
 
-Below is a patchworked plot of the first three PCs compared to each other for
-*A. laevis*.
+### All samples
 
 ```{r pca-ALA}
-pc_1_2 <- plotPCA(pca_list = lst_pca, species = "ALA", pcA = "PC1", pcB = "PC2", xstep = 2)
-pc_1_3 <- plotPCA(pca_list = lst_pca, species = "ALA", pcA = "PC1", pcB = "PC3", xstep = 2)
-pc_2_3 <- plotPCA(pca_list = lst_pca, species = "ALA", pcA = "PC2", pcB = "PC3")
-
+ala_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "ALA", pcA = "PC1", pcB = "PC2", xstep = 2, pal = pal_PCA)
+hst_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "HMA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
+hma_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "HST", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
 
 design <- "12\n34"
 
-pc_1_2 + pc_1_3 + pc_2_3 + guide_area() +
+ala_pc_1_2 + hst_pc_1_2 + hma_pc_1_2 + guide_area() +
     plot_layout(
         design = design,
         guides = "collect",
         axes = "collect"
     ) &
-    guides(colour = guide_legend(ncol = 3, override.aes = list(size = 3)))
+    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3)))
 ```
 
-### *Hydrophis major*
+And the same for *just* the WA coastline samples
 
-Below is a patchworked plot of the first three PCs compared to each other for
+```{r}
+ala_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "ALA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
+hma_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "HMA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
+hst_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "HST", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
+
+design <- "12\n34"
+
+ala_pc_1_2 + hma_pc_1_2 + hst_pc_1_2 + guide_area() +
+    plot_layout(
+        design = design,
+        guides = "collect",
+        axes = "collect"
+    ) &
+    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3)))
+```
+
+We can see that the Shark Bay samples partition off in both *A. laevis* and
 *H. major*.
-
-```{r}
-pc_1_2 <- plotPCA(pca_list = lst_pca, species = "HMA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2)
-pc_1_3 <- plotPCA(pca_list = lst_pca, species = "HMA", pcA = "PC1", pcB = "PC3", xstep = 2, ystep = 2)
-pc_2_3 <- plotPCA(pca_list = lst_pca, species = "HMA", pcA = "PC2", pcB = "PC3", ystep = 2)
-
-pc_1_2 + pc_1_3 + pc_2_3 + guide_area() +
-    plot_layout(
-        design = design, 
-        guides = "collect",
-        axes = "collect"
-    ) &
-    guides(colour = guide_legend(ncol = 3, override.aes = list(size = 4)))
-```
-
-### *Hydrophis stokesii*
-
-Below is a patchworked plot of the first three PCs compared to each other for
-*H. stokesii*.
-
-```{r}
-pc_1_2 <- plotPCA(pca_list = lst_pca, species = "HST", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2)
-pc_1_3 <- plotPCA(pca_list = lst_pca, species = "HST", pcA = "PC1", pcB = "PC3", xstep = 2, ystep = 2)
-pc_2_3 <- plotPCA(pca_list = lst_pca, species = "HST", pcA = "PC2", pcB = "PC3", xstep = 2, ystep = 2)
-
-pc_1_2 + pc_1_3 + pc_2_3 + guide_area() +
-    plot_layout(
-        design = design, 
-        guides = "collect",
-        axes = "collect"
-    ) &
-    guides(colour = guide_legend(ncol = 3, override.aes = list(size = 4)))
-```
 
 ## STRUCTURE
 
@@ -293,7 +323,7 @@ etable <- fs::dir_ls(
     recurse = TRUE
 ) |>
     read_csv(col_names = TRUE, col_types = cols(), id = "species") |>
-    mutate(species = str_remove(basename(species), "-etable.csv")) |>
+    mutate(species = str_remove(basename(species), "-.*")) |>
     rename(K = `...1`)
 
 etable |>
@@ -347,53 +377,7 @@ product of over-fitting.
 
 ### *Aipysurus laevis*
 
-The figure below plots all tested population k-values (rows). As is expected
-based on the log-probability + delta-k figure above, adding populations doesn't
-really seem to do much, as the additional populations have minute contributions
-overall.
-
-As such, a conservative approach using a lower K-value (i.e. fewer populations)
-is likely the play.
-
-```{r}
-structure_df |>
-    filter(species == "ALA") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        limits = c(0, 1),
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.5,
-            size = 14
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-```
-
-Below is the figure for `K = 2` and `K = 3`. Even adding an additional population
-(`K = 3`) seems to be over-fitting.
+Below are the figures for two an three estimated populations.
 
 ```{r}
 structure_df |>
@@ -434,51 +418,12 @@ structure_df |>
 
 ### *Hydrophis major*
 
-Here, we do the same for *H. major*.
+The figure for *H. major* shows the Shark Bay samples as having a distinct
+genetic profile at $\text{K}=\text{3}$.
 
 ```{r}
 structure_df |>
-    filter(species == "HMA") |> 
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.5,
-            size = 14
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-```
-
-And again plot the first few K-increments. There does look to be a bit of
-variability in the Shark Bay samples when `K = 3`, so perhaps a higher K-value
-is warranted. However, K-values of 4 and 5 appear to be over fitting.
-
-```{r}
-structure_df |>
-    filter(species == "HMA", K %in% c("K2", "K3", "K4", "K5")) |>
+    filter(species == "HMA", K %in% c("K2", "K3")) |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -514,11 +459,14 @@ structure_df |>
 
 ### *Hydrophis stokesii*
 
-Lastly, we do the same for *H. stokesii*.
+*H. stokesii* has little evidence to suggest more than two populations in WA.
+The Delta-K figure above indicates `K=4`, but the mean log-probability doesn't
+indicate that the `K=4` model is better than any of others, perhaps suggesting
+over-fitting.
 
 ```{r}
 structure_df |>
-    filter(species == "HST") |> 
+    filter(species == "HST", K %in% c("K2", "K3" )) |> 
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -554,48 +502,3 @@ structure_df |>
     )
 ```
 
-Similar to the other species, these snakes appear to be a homogeneous population
-in the WA region, as `K = 3` appears to simply be fractioning the starting populations.
-
-```{r}
-structure_df |>
-    filter(species == "HST", K %in% c("K2", "K3")) |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.1,
-            vjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-```
-
-[ipatools]: https://ipyrad.readthedocs.io/en/master/API-analysis/index.html
-[pcaipynb]: https://github.com/a-lud/sea-snake-dart/blob/main/scripts/06-pca.ipynb
-[dropped]: 
-[ignore]: 
