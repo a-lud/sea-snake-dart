@@ -1,6 +1,6 @@
 Population structure
 ================
-2024-12-20
+2025-01-31
 
 - [Helper functions](#helper-functions)
 - [Removed samples](#removed-samples)
@@ -25,7 +25,7 @@ and `y` maxima/minima and formatting.
 ``` r
 # Function that takes the PCA list we'll generate below and plot the desired PCs
 # for the specified population
-plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, xstep = 1, ystep = 1, pal = "Spectral") {
+plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, xstep = 1, ystep = 1, pal) {
     full_species <- set_names(c("ALA", "HMA", "HST"), c("Aipysurus laevis", "Hydrophis major", "Hydrophis stokesii"))
     plot_title <- names(full_species[full_species == spec])
     
@@ -34,6 +34,23 @@ plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, 
     
     sp_var <- variance_dataframe |>
         filter(species == spec, WA == WA_only)
+    
+    # TODO: Figure out why this is being a piece of shit
+    if(WA_only){
+        wa_levels <- pca_dataframe |> 
+            filter(WA == TRUE) |> 
+            pull(population) |> 
+            unique() |>
+            as.character()
+        
+        sp_pca <- sp_pca |>
+            mutate(
+                population = factor(
+                    population,
+                    levels = wa_levels
+                )
+            )
+    }
     
     # x-axis: max/min
     xmin <- sp_pca |>
@@ -78,7 +95,10 @@ plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, 
             )
         ) +
         geom_point(size = 2.5, show.legend=TRUE) +
-        scale_colour_manual(values = pal, drop = FALSE) +
+        scale_colour_manual(
+            values = pal,
+            drop = FALSE
+        ) +
         labs(
             title = glue::glue("{plot_title}"),
             colour = "Population",
@@ -127,6 +147,12 @@ simply creating custom figures. We generate PCAs for **all** samples
 across all populations for each species.
 
 ``` r
+pop_levels <- c(
+    "Shark Bay" ,"Exmouth Gulf", "Pilbara", 
+    "Broome", "North Kimberley", "Scott Reef", "Ashmore", "Heywood Shoal",
+    "Gulf of Carpentaria", "North QLD", "South QLD", "New Caledonia"
+)
+
 # PCA dataframes
 df_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
     (\(x) x[!str_detect(x, "variance")])() |>
@@ -141,12 +167,14 @@ df_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.c
         pops |>
             filter(species == spec) |>
             inner_join(tmp) |>
-            inner_join(meta, by = join_by(sample == id_clean)) |>
             mutate(WA = wa, .after = species)
     }) |>
     list_rbind() |>
     select(species, WA, sample, population, PC1, PC2, PC3) |>
-    mutate(population = forcats::fct_inorder(population))
+    mutate(
+        population = str_replace_all(population, "_", " "),
+        population = factor(population, levels = pop_levels)
+    )
 
 # Variance dataframes
 df_variance <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*variance.csv") |>
@@ -180,7 +208,7 @@ pal_PCA <- c(
     "#66C2A5", "#FC8D62", "#8DA0CB",
     "#B3B3B3"
 )
-names(pal_PCA) <- levels(df_pca$population)
+names(pal_PCA) <- pop_levels
 ```
 
 ### All samples
@@ -192,13 +220,27 @@ hma_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, 
 
 design <- "12\n34"
 
-ala_pc_1_2 + hst_pc_1_2 + hma_pc_1_2 + guide_area() +
+plot_pca_all <- ala_pc_1_2 + hst_pc_1_2 + hma_pc_1_2 + guide_area() +
     plot_layout(
         design = design,
         guides = "collect",
         axes = "collect"
-    ) &
-    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3)))
+    ) +
+    plot_annotation(tag_levels = 'A') &
+    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3))) &
+    theme(plot.tag = element_text(size = 14, face = "bold"))
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "pca-all-species-all-pops.png"),
+    width = 1500, 
+    height = 1500,
+    units = "px",  
+    res = 150
+)
+plot_pca_all
+invisible(dev.off())
+
+plot_pca_all
 ```
 
 <img src="population-structure_files/figure-gfm/pca-ALA-1.png" width="100%" />
@@ -212,13 +254,27 @@ hst_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, 
 
 design <- "12\n34"
 
-ala_pc_1_2 + hma_pc_1_2 + hst_pc_1_2 + guide_area() +
+plot_pca_wa <- ala_pc_1_2 + hma_pc_1_2 + hst_pc_1_2 + guide_area() +
     plot_layout(
         design = design,
         guides = "collect",
         axes = "collect"
     ) &
-    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3)))
+    plot_annotation(tag_levels = 'A') &
+    guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3))) &
+    theme(plot.tag = element_text(size = 14, face = "bold"))
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "pca-all-species-WA-pops.png"),
+    width = 1500, 
+    height = 1500,
+    units = "px",  
+    res = 150
+)
+plot_pca_wa
+invisible(dev.off())
+
+plot_pca_wa
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-1-1.png" width="100%" />
@@ -263,7 +319,8 @@ structure_df <- fs::dir_ls(
     }) |>
     list_rbind() |>
     mutate(
-        partition = forcats::fct_inorder(as.character(partition)), 
+        partition = forcats::fct_inorder(as.character(partition)),
+        population = str_replace_all(population, "_", " "),
         population = factor(population, levels = structure_pops),
         .by = K
     )
@@ -304,7 +361,7 @@ etable |>
     as_raw_html()
 ```
 
-<div id="rfvzvmtdto" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="syqsbbiino" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -441,8 +498,20 @@ dk <- etable |>
         breaks = seq(0, 15, 1)
     )
 
-prb/dk +
+plot_models <- prb/dk +
     plot_layout(axes = "collect", guides = "collect")
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-model-fit.png"),
+    width = 1000, 
+    height = 800,
+    units = "px",  
+    res = 150
+)
+plot_models
+invisible(dev.off())
+
+plot_models
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-3-1.png" width="100%" />
@@ -460,7 +529,7 @@ over-fitting.
 Below are the figures for two an three estimated populations.
 
 ``` r
-structure_df |>
+plot_structure_ALA <- structure_df |>
     filter(species == "ALA", K %in% c("K2", "K3")) |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
@@ -494,6 +563,18 @@ structure_df |>
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
     )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_ALA
+invisible(dev.off())
+
+plot_structure_ALA
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-4-1.png" width="100%" />
@@ -504,7 +585,7 @@ The figure for *H. major* shows the Shark Bay samples as having a
 distinct genetic profile at $\text{K}=\text{3}$.
 
 ``` r
-structure_df |>
+plot_structure_HMA <- structure_df |>
     filter(species == "HMA", K %in% c("K2", "K3")) |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
@@ -537,6 +618,18 @@ structure_df |>
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
     )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HMA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HMA
+invisible(dev.off())
+
+plot_structure_HMA
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-5-1.png" width="100%" />
@@ -549,7 +642,7 @@ log-probability doesn’t indicate that the `K=4` model is better than any
 of others, perhaps suggesting over-fitting.
 
 ``` r
-structure_df |>
+plot_structure_HST <- structure_df |>
     filter(species == "HST", K %in% c("K2", "K3" )) |> 
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
@@ -584,6 +677,18 @@ structure_df |>
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
     )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HST-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HST
+invisible(dev.off())
+
+plot_structure_HST
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
