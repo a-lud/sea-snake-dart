@@ -273,6 +273,8 @@ invisible(dev.off())
 plot_pca_all
 ```
 
+### WA Coast
+
 And the same for *just* the WA coastline samples
 
 ```{r}
