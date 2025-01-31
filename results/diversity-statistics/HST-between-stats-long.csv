@@ -1,0 +1,28 @@
+population,population2,values,tri_partition
+"Coastal
+WA","Coastal
+WA",NA,diagonal
+"Coastal
+WA","Gulf of
+Carpentaria",0.08052006716396502,upper
+"Coastal
+WA","Offshore
+WA",0.03407389312134082,upper
+"Gulf of
+Carpentaria","Coastal
+WA",0.010195005065026318,lower
+"Gulf of
+Carpentaria","Gulf of
+Carpentaria",NA,diagonal
+"Gulf of
+Carpentaria","Offshore
+WA",0.17408581634180273,upper
+"Offshore
+WA","Coastal
+WA",0.008797223514796372,lower
+"Offshore
+WA","Gulf of
+Carpentaria",0.01602161551265017,lower
+"Offshore
+WA","Offshore
+WA",NA,diagonal

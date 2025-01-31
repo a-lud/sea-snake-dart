@@ -1,0 +1,76 @@
+population,population2,values,tri_partition
+"Coastal
+WA","Coastal
+WA",NA,diagonal
+"Coastal
+WA","Gulf of
+Carpentaria",0.08118823311985864,upper
+"Coastal
+WA","New
+Caledonia",0.18729677931802613,upper
+"Coastal
+WA","Offshore
+WA",0.03717558113568378,upper
+"Coastal
+WA","Shark
+Bay",0.008648582491983156,upper
+"Gulf of
+Carpentaria","Coastal
+WA",0.007611617013785514,lower
+"Gulf of
+Carpentaria","Gulf of
+Carpentaria",NA,diagonal
+"Gulf of
+Carpentaria","New
+Caledonia",0.16827541261886644,upper
+"Gulf of
+Carpentaria","Offshore
+WA",0.0969764008146777,upper
+"Gulf of
+Carpentaria","Shark
+Bay",0.09964612171370277,upper
+"New
+Caledonia","Coastal
+WA",0.012761356629993979,lower
+"New
+Caledonia","Gulf of
+Carpentaria",0.010848915870288826,lower
+"New
+Caledonia","New
+Caledonia",NA,diagonal
+"New
+Caledonia","Offshore
+WA",0.20109237864621748,upper
+"New
+Caledonia","Shark
+Bay",0.2297516746203062,upper
+"Offshore
+WA","Coastal
+WA",0.0023129107452706447,lower
+"Offshore
+WA","Gulf of
+Carpentaria",0.008222043490625207,lower
+"Offshore
+WA","New
+Caledonia",0.013385212866232305,lower
+"Offshore
+WA","Offshore
+WA",NA,diagonal
+"Offshore
+WA","Shark
+Bay",0.054988078617461904,upper
+"Shark
+Bay","Coastal
+WA",0.002110483777764784,lower
+"Shark
+Bay","Gulf of
+Carpentaria",0.009602130451256158,lower
+"Shark
+Bay","New
+Caledonia",0.014594809795899501,lower
+"Shark
+Bay","Offshore
+WA",0.004433189977069762,lower
+"Shark
+Bay","Shark
+Bay",NA,diagonal
