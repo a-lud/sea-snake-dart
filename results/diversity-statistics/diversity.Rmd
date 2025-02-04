@@ -25,6 +25,15 @@ suppressPackageStartupMessages({
     library(patchwork)
 })
 
+# Problem samples to remove 
+samples_remove <- read_tsv(
+    here("data", "popmaps", "dropped-samples.tsv"), 
+    skip = 1, 
+    col_names = c("sample", "pop"),
+    col_types = cols()
+) |>
+    pull(sample)
+
 theme_set(theme_bw())
 
 fs::dir_create(path = here("results", "diversity-statistics"))
@@ -36,6 +45,7 @@ The standard `calc_genetic_distance()` function from `snpR` doesn't remove missi
 data when using the `Nei` method (it does when using the `Edwards` method). As
 such, the code below is taken from the `snpR` package, with one additional line
 added to the `.get_dist()` function.
+
 ```{r}
 al_calc_genetic_distances <- function(x, facets = NULL, method = "Edwards", interpolate = "bernoulli") {
     # ============sanity checks=========
@@ -202,7 +212,10 @@ meta <- fs::dir_ls(
                 col_names = c("sampID", "population"), 
                 col_types = cols()
             ) |>
-            filter(!str_detect(population, "QLD"))
+            filter(
+                ! str_detect(population, "QLD"), 
+                ! sampID %in% samples_remove
+            )
     })
 ```
 
@@ -297,7 +310,7 @@ Next we'll calculate a range of diversity statistics. The program `snpR` has a
 really convenient function `calc_basic_snp_stats()` which practically estimates
 all the statistics we want.
 
-Below we estimate `pi`, `ho`, `he`, F~IS~, HWE and pairwise F~ST~. We estimate
+Below we estimate π, H~o~, H~e~, F~IS~, HWE and pairwise F~ST~. We estimate
 all statistics by population.
 
 ```{r calc-basic-stats}
@@ -360,6 +373,7 @@ pixy_pi <- fs::dir_ls(
             .default = pop
         )
     ) |>
+    # Generating genome-wide averages
     summarise(
         pixy_pi = sum(count_diffs) / sum(count_comparisons),
         .by = c(species, pop)
@@ -425,12 +439,12 @@ within |>
     as_raw_html()
 ```
 
-I've left the $\pi$ calculation based on **just SNPs** in the table. We can see
+I've left the π calculation based on **just SNPs** in the table. We can see
 that the values are much higher than the `pixy` estimations.
 
 # Between population statistics
 
-Lastly we have our F~ST~ measures and Nei's genetic distance measures as heatmaps.
+Lastly we have our F~ST~ measures and Nei's genetic distance measures as heat maps.
 We need to manipulate the data a bit as the F~ST~ data don't include the diagonal.
 
 ```{r get-fst}
@@ -512,8 +526,8 @@ df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
     set_names(c("ALA", "HMA", "HST"))
 ```
 
-First we'll save the combined matricies to file, where upper triangle is F~ST~
-and the lower triangle is Nei's genetic distnace.
+First we'll save the combined matrices to file, where upper triangle is F~ST~
+and the lower triangle is Nei's genetic distance
 
 ```{r}
 # Write long form tables used for plotting
@@ -609,6 +623,7 @@ plotHeatMap <- function(
         )
 }
 ```
+
 And lastly we'll generate heatmaps of pairwise diversity, where the upper
 triangle is F~ST~ and the lower is Nei's genetic distance. These are two different
 pairwise measures that should be broadly similar.
