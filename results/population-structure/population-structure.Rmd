@@ -47,6 +47,15 @@ ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
     distinct() |>
     pull() |>
     str_replace_all("_", " ")
+
+# Problem samples to remove 
+samples_remove <- read_tsv(
+    here("data", "popmaps", "dropped-samples.tsv"), 
+    skip = 1, 
+    col_names = c("sample", "pop"),
+    col_types = cols()
+) |>
+    pull(sample)
 ```
 
 ## Helper functions
@@ -598,4 +607,184 @@ invisible(dev.off())
 
 plot_structure_HST
 ```
+
+# Isolation by Distance (IBD)
+
+Lastly, we'll perform Isolation-by-distance analysis. The function
+`calc_isolation_by_distance()` from the `snpR` package doesn't like working with
+single samples as the object returned after checking if there is only one sample
+is a dataframe when it should be a vector. Consequently, the matrix/array
+ends up being a single row with multiple columns rather than two columns (long/lat)
+and each sample as rows.
+
+As such, I've edited the function and run the custom version below.
+
+Note: I also found this repo helpful - https://github.com/jdalapicolla/IBD_models.R
+
+```{r}
+# Load the snpR library and the custom scripts (found in the scripts directory)
+library(snpR)
+source(here("scripts", "snpR-edited.R"))
+
+wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
+
+# Load updated lat/long popmaps
+set.seed(123)
+meta_latLong <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
+    map(\(x) {
+        x |>
+            read_csv(col_types = cols()) |>
+            select(species, id, targetid, pop, latitude, longitude) |>
+            unite(col = "sampID", sep = "-", species, id, targetid) |> 
+            filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove) |>
+            select(sampID, pop, x = longitude, y = latitude) |>
+            # For snakes with identical long/lat + population, choose one at random
+            slice_sample(n = 1, by = c(pop, x, y))
+    })
+
+# Load the VCF files as snpR data objects
+vcfs <- fs::dir_ls(
+    here("results", "ipyrad"),
+    glob = "*stringent.vcf.gz",
+    recurse = TRUE
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    imap(\(v,i) {
+        tmp_vcf <- read_vcf(file = v)
+        
+        filt_vcf <- filter_snps(
+            tmp_vcf,
+            min_ind = 0.8,
+            min_loci = 0.75,
+            re_run = TRUE
+        )
+        
+        # Subset for samples to keep + add in metadata
+        filt_vcf <- subset_snpR_data(
+            x = filt_vcf, 
+            .facets = "sampID",
+            .subfacets = meta_latLong[[i]]$sampID
+        )
+        
+        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong[[i]])
+        
+        filt_vcf <- custom_calc_genetic_distances(filt_vcf, facets = c("sampID", "pop"), method = "Nei")
+        filt_vcf
+    })
+```
+
+After loading the VCF files and performing the mantel test, I generate a summary
+table of the statistics.
+
+```{r IBD-mantel}
+# First, get statistics
+mantel_statistics <- vcfs |>
+    imap(\(x, i) {
+        tmp <- custom_ibd(
+            x = x,
+            facets = c("sampID", "pop"),
+            genetic_distance_method = "Nei"
+        )
+        
+        # Extract statistic results: TODO
+        tmp_stats <- get.snpR.stats(tmp, facets = "sampID", stats = "ibd")
+        tmp_stats <- tmp_stats$sampID$.base$Nei
+        
+        tibble(
+            "Observed correlation" = tmp_stats$obs,
+            "pvalue" = tmp_stats$pvalue,
+            "Std. Obs" = tmp_stats$expvar[[1]],
+            "Expectation" = tmp_stats$expvar[[2]],
+            "Variance" = tmp_stats$expvar[[3]],
+            "Replicates" = tmp_stats$rep
+        )
+    }) |>
+    list_rbind(names_to = "species")
+
+# Write to file
+mantel_statistics |>
+    write_csv(here("results", "population-structure", "mantel-statistics.csv"))
+
+mantel_statistics |>
+    gt(rowname_col = "species") |>
+    gt::fmt_number(columns = c(2,3,4,5,6), n_sigfig = 2) |>
+    as_raw_html()
+```
+
+Lastly, let's generate a scatter plot of distance vs genetic distance. Add the
+correlation coefficients and p-values in Inkscape or something.
+
+```{r}
+df_long <- vcfs |>
+    imap(\(x, i) {
+        tmp <- custom_ibd(
+            x = x,
+            facets = c("sampID", "pop"),
+            genetic_distance_method = "Nei"
+        )
+        
+        # Dataframe for plotting
+        mta <- get.snpR.stats(tmp, facets = "sampID", "geo_dist")
+        mta <- as.matrix(mta$sampID$Nei)
+        mta[upper.tri(mta, diag = T)] = NA
+        geo_dist <- mta |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2","GeoDist")) |>
+            as_tibble()
+        
+        mta <- get.snpR.stats(tmp, facets = "sampID", "genetic_distance")
+        mta <- as.matrix(mta$sampID$.base$Nei)
+        mta[upper.tri(mta, diag = T)] = NA
+        gen_dist <- mta |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2", "GenDist")) |>
+            as_tibble()
+        
+        left_join(gen_dist, geo_dist)
+        
+    }) |>
+    list_rbind(names_to = "species")
+
+# Plot distance (kilometres) vs genetic distance (Nei)
+plot_scatter <- df_long |>
+    ggplot(aes(x = GeoDist, y = GenDist, colour = species)) +
+    geom_point(alpha = 0.4) +
+    geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
+    scale_x_continuous(
+        name = "Distance (Km)",
+        breaks = seq(0, 1600, 200),
+        labels = as.character(seq(0, 1600, 200)),
+        expand = c(0.01, 0, 0.02, 0)
+    ) +
+    scale_y_continuous(
+        name = "Genetic distance (Nei)",
+        breaks = seq(0, 0.055, 0.005),
+        labels = as.character(seq(0, 0.055, 0.005)),
+        limits = c(0, 0.055),
+        expand = c(0.02, 0)
+    ) +
+    scale_colour_brewer(palette = "Set2") +
+    guides(colour = guide_legend(override.aes = list(size = 6))) +
+    theme(
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.position = "top",
+        legend.text = element_text(size = 14),
+        legend.title = element_blank()
+    )
+
+cairo_pdf(
+    here("results", "population-structure", "mantel-scatter.pdf"),
+    width = 12, height = 12
+)
+plot_scatter
+invisible(dev.off())
+
+plot_scatter
+``` 
 

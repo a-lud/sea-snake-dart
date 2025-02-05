@@ -1,6 +1,6 @@
 Population structure
 ================
-2025-01-31
+2025-02-05
 
 - [Helper functions](#helper-functions)
 - [Removed samples](#removed-samples)
@@ -13,6 +13,7 @@ Population structure
     - [*Aipysurus laevis*](#aipysurus-laevis)
     - [*Hydrophis major*](#hydrophis-major)
     - [*Hydrophis stokesii*](#hydrophis-stokesii)
+- [Isolation by Distance (IBD)](#isolation-by-distance-ibd)
 
 This directory contains population structure results. The script
 `population-structure.Rmd` renders this `README` and is responsible for
@@ -364,7 +365,7 @@ etable |>
     as_raw_html()
 ```
 
-<div id="zdviegdgag" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="wrkoawxofb" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -695,3 +696,358 @@ plot_structure_HST
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
+
+# Isolation by Distance (IBD)
+
+Lastly, we’ll perform Isolation-by-distance analysis. The function
+`calc_isolation_by_distance()` from the `snpR` package doesn’t like
+working with single samples as the object returned after checking if
+there is only one sample is a dataframe when it should be a vector.
+Consequently, the matrix/array ends up being a single row with multiple
+columns rather than two columns (long/lat) and each sample as rows.
+
+As such, I’ve edited the function and run the custom version below.
+
+Note: I also found this repo helpful -
+<https://github.com/jdalapicolla/IBD_models.R>
+
+``` r
+# Load the snpR library and the custom scripts (found in the scripts directory)
+library(snpR)
+source(here("scripts", "snpR-edited.R"))
+
+wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
+
+# Load updated lat/long popmaps
+set.seed(123)
+meta_latLong <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
+    map(\(x) {
+        x |>
+            read_csv(col_types = cols()) |>
+            select(species, id, targetid, pop, latitude, longitude) |>
+            unite(col = "sampID", sep = "-", species, id, targetid) |> 
+            filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove) |>
+            select(sampID, pop, x = longitude, y = latitude) |>
+            # For snakes with identical long/lat + population, choose one at random
+            slice_sample(n = 1, by = c(pop, x, y))
+    })
+
+# Load the VCF files as snpR data objects
+vcfs <- fs::dir_ls(
+    here("results", "ipyrad"),
+    glob = "*stringent.vcf.gz",
+    recurse = TRUE
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    imap(\(v,i) {
+        tmp_vcf <- read_vcf(file = v)
+        
+        filt_vcf <- filter_snps(
+            tmp_vcf,
+            min_ind = 0.8,
+            min_loci = 0.75,
+            re_run = TRUE
+        )
+        
+        # Subset for samples to keep + add in metadata
+        filt_vcf <- subset_snpR_data(
+            x = filt_vcf, 
+            .facets = "sampID",
+            .subfacets = meta_latLong[[i]]$sampID
+        )
+        
+        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong[[i]])
+        
+        filt_vcf <- custom_calc_genetic_distances(filt_vcf, facets = c("sampID", "pop"), method = "Nei")
+        filt_vcf
+    })
+```
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 133969
+    ##   column count: 214
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 133969
+    ##   Character matrix gt cols: 214
+    ##   skip: 0
+    ##   nrows: 133969
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant 53000Processed variant 54000Processed variant 55000Processed variant 56000Processed variant 57000Processed variant 58000Processed variant 59000Processed variant 60000Processed variant 61000Processed variant 62000Processed variant 63000Processed variant 64000Processed variant 65000Processed variant 66000Processed variant 67000Processed variant 68000Processed variant 69000Processed variant 70000Processed variant 71000Processed variant 72000Processed variant 73000Processed variant 74000Processed variant 75000Processed variant 76000Processed variant 77000Processed variant 78000Processed variant 79000Processed variant 80000Processed variant 81000Processed variant 82000Processed variant 83000Processed variant 84000Processed variant 85000Processed variant 86000Processed variant 87000Processed variant 88000Processed variant 89000Processed variant 90000Processed variant 91000Processed variant 92000Processed variant 93000Processed variant 94000Processed variant 95000Processed variant 96000Processed variant 97000Processed variant 98000Processed variant 99000Processed variant 100000Processed variant 101000Processed variant 102000Processed variant 103000Processed variant 104000Processed variant 105000Processed variant 106000Processed variant 107000Processed variant 108000Processed variant 109000Processed variant 110000Processed variant 111000Processed variant 112000Processed variant 113000Processed variant 114000Processed variant 115000Processed variant 116000Processed variant 117000Processed variant 118000Processed variant 119000Processed variant 120000Processed variant 121000Processed variant 122000Processed variant 123000Processed variant 124000Processed variant 125000Processed variant 126000Processed variant 127000Processed variant 128000Processed variant 129000Processed variant 130000Processed variant 131000Processed variant 132000Processed variant 133000Processed variant: 133969
+    ## All variants processed
+
+    ## re_run must be set to partial or full if not FALSE.
+    ## Initializing...
+    ## Filtering loci. Starting loci: 130955 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  96526 bad loci
+
+    ##  Ending loci: 34429 
+    ## Filtering individuals. Starting individuals: 205 
+    ## Filtering out individuals sequenced in few kept loci...
+
+    ## Re-calculating and adding facets.
+    ##  Ending individuals: 189 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  10539 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  6 bad loci
+
+    ##  Final loci count: 23887
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 52666
+    ##   column count: 101
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 52666
+    ##   Character matrix gt cols: 101
+    ##   skip: 0
+    ##   nrows: 52666
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant: 52666
+    ## All variants processed
+
+    ## re_run must be set to partial or full if not FALSE.
+    ## Initializing...
+    ## Filtering loci. Starting loci: 51961 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  40790 bad loci
+
+    ##  Ending loci: 11171 
+    ## Filtering individuals. Starting individuals: 92 
+    ## Filtering out individuals sequenced in few kept loci...
+
+    ## Re-calculating and adding facets.
+    ##  Ending individuals: 85 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  802 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  0 bad loci
+
+    ##  Final loci count: 10369
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 90080
+    ##   column count: 123
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 90080
+    ##   Character matrix gt cols: 123
+    ##   skip: 0
+    ##   nrows: 90080
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant 53000Processed variant 54000Processed variant 55000Processed variant 56000Processed variant 57000Processed variant 58000Processed variant 59000Processed variant 60000Processed variant 61000Processed variant 62000Processed variant 63000Processed variant 64000Processed variant 65000Processed variant 66000Processed variant 67000Processed variant 68000Processed variant 69000Processed variant 70000Processed variant 71000Processed variant 72000Processed variant 73000Processed variant 74000Processed variant 75000Processed variant 76000Processed variant 77000Processed variant 78000Processed variant 79000Processed variant 80000Processed variant 81000Processed variant 82000Processed variant 83000Processed variant 84000Processed variant 85000Processed variant 86000Processed variant 87000Processed variant 88000Processed variant 89000Processed variant 90000Processed variant: 90080
+    ## All variants processed
+
+    ## re_run must be set to partial or full if not FALSE.
+    ## Initializing...
+    ## Filtering loci. Starting loci: 88607 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  65517 bad loci
+
+    ##  Ending loci: 23090 
+    ## Filtering individuals. Starting individuals: 114 
+    ## Filtering out individuals sequenced in few kept loci...
+
+    ## Re-calculating and adding facets.
+    ##  Ending individuals: 102 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  3904 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  0 bad loci
+
+    ##  Final loci count: 19186
+
+After loading the VCF files and performing the mantel test, I generate a
+summary table of the statistics.
+
+``` r
+# First, get statistics
+mantel_statistics <- vcfs |>
+    imap(\(x, i) {
+        tmp <- custom_ibd(
+            x = x,
+            facets = c("sampID", "pop"),
+            genetic_distance_method = "Nei"
+        )
+        
+        # Extract statistic results: TODO
+        tmp_stats <- get.snpR.stats(tmp, facets = "sampID", stats = "ibd")
+        tmp_stats <- tmp_stats$sampID$.base$Nei
+        
+        tibble(
+            "Observed correlation" = tmp_stats$obs,
+            "pvalue" = tmp_stats$pvalue,
+            "Std. Obs" = tmp_stats$expvar[[1]],
+            "Expectation" = tmp_stats$expvar[[2]],
+            "Variance" = tmp_stats$expvar[[3]],
+            "Replicates" = tmp_stats$rep
+        )
+    }) |>
+    list_rbind(names_to = "species")
+
+# Write to file
+mantel_statistics |>
+    write_csv(here("results", "population-structure", "mantel-statistics.csv"))
+
+mantel_statistics |>
+    gt(rowname_col = "species") |>
+    gt::fmt_number(columns = c(2,3,4,5,6), n_sigfig = 2) |>
+    as_raw_html()
+```
+
+<div id="ksttmufqkm" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+  &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
+  <thead style="border-style: none;">
+    <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="a::stub" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: left;" bgcolor="#FFFFFF" valign="bottom" align="left"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Observed-correlation" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Observed correlation</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="pvalue" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">pvalue</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Std.-Obs" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Std. Obs</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Expectation" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Expectation</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Variance" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Variance</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Replicates" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Replicates</th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3;">
+    <tr style="border-style: none;"><th id="stub_1_1" scope="row" class="gt_row gt_left gt_stub" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; text-align: left;" valign="middle" bgcolor="#FFFFFF" align="left">ALA</th>
+<td headers="stub_1_1 Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.030</td>
+<td headers="stub_1_1 pvalue" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.22</td>
+<td headers="stub_1_1 Std. Obs" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.76</td>
+<td headers="stub_1_1 Expectation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0025</td>
+<td headers="stub_1_1 Variance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0013</td>
+<td headers="stub_1_1 Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">999</td></tr>
+    <tr style="border-style: none;"><th id="stub_1_2" scope="row" class="gt_row gt_left gt_stub" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; text-align: left;" valign="middle" bgcolor="#FFFFFF" align="left">HMA</th>
+<td headers="stub_1_2 Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.23</td>
+<td headers="stub_1_2 pvalue" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0010</td>
+<td headers="stub_1_2 Std. Obs" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">4.4</td>
+<td headers="stub_1_2 Expectation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">−0.0021</td>
+<td headers="stub_1_2 Variance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0028</td>
+<td headers="stub_1_2 Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">999</td></tr>
+    <tr style="border-style: none;"><th id="stub_1_3" scope="row" class="gt_row gt_left gt_stub" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; text-align: left;" valign="middle" bgcolor="#FFFFFF" align="left">HST</th>
+<td headers="stub_1_3 Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.18</td>
+<td headers="stub_1_3 pvalue" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0090</td>
+<td headers="stub_1_3 Std. Obs" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">2.5</td>
+<td headers="stub_1_3 Expectation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">−0.0053</td>
+<td headers="stub_1_3 Variance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0054</td>
+<td headers="stub_1_3 Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">999</td></tr>
+  </tbody>
+  &#10;  
+</table>
+</div>
+
+Lastly, let’s generate a scatter plot of distance vs genetic distance.
+Add the correlation coefficients and p-values in Inkscape or something.
+
+``` r
+df_long <- vcfs |>
+    imap(\(x, i) {
+        tmp <- custom_ibd(
+            x = x,
+            facets = c("sampID", "pop"),
+            genetic_distance_method = "Nei"
+        )
+        
+        # Dataframe for plotting
+        mta <- get.snpR.stats(tmp, facets = "sampID", "geo_dist")
+        mta <- as.matrix(mta$sampID$Nei)
+        mta[upper.tri(mta, diag = T)] = NA
+        geo_dist <- mta |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2","GeoDist")) |>
+            as_tibble()
+        
+        mta <- get.snpR.stats(tmp, facets = "sampID", "genetic_distance")
+        mta <- as.matrix(mta$sampID$.base$Nei)
+        mta[upper.tri(mta, diag = T)] = NA
+        gen_dist <- mta |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2", "GenDist")) |>
+            as_tibble()
+        
+        left_join(gen_dist, geo_dist)
+        
+    }) |>
+    list_rbind(names_to = "species")
+
+# Plot distance (kilometres) vs genetic distance (Nei)
+plot_scatter <- df_long |>
+    ggplot(aes(x = GeoDist, y = GenDist, colour = species)) +
+    geom_point(alpha = 0.4) +
+    geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
+    scale_x_continuous(
+        name = "Distance (Km)",
+        breaks = seq(0, 1600, 200),
+        labels = as.character(seq(0, 1600, 200)),
+        expand = c(0.01, 0, 0.02, 0)
+    ) +
+    scale_y_continuous(
+        name = "Genetic distance (Nei)",
+        breaks = seq(0, 0.055, 0.005),
+        labels = as.character(seq(0, 0.055, 0.005)),
+        limits = c(0, 0.055),
+        expand = c(0.02, 0)
+    ) +
+    scale_colour_brewer(palette = "Set2") +
+    guides(colour = guide_legend(override.aes = list(size = 6))) +
+    theme(
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.position = "top",
+        legend.text = element_text(size = 14),
+        legend.title = element_blank()
+    )
+
+cairo_pdf(
+    here("results", "population-structure", "mantel-scatter.pdf"),
+    width = 12, height = 12
+)
+plot_scatter
+invisible(dev.off())
+
+plot_scatter
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
