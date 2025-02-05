@@ -10,7 +10,7 @@ This directory contains results relating to diversity statistics, both within
 and between populations. The statistics are generated from the unfiltered
 `Ipyrad` VCFs, with all filtering being applied by the package `snpR`.
 
-```{r setup, include=FALSE, echo=FALSE}
+```{r setup, include=FALSE}
 knitr::opts_chunk$set(
     echo = TRUE, message = FALSE,
     warning = FALSE, error = FALSE,
