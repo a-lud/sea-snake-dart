@@ -39,6 +39,12 @@ pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
         species = str_remove(basename(species), "-.*")
     )
 
+popmap_lat_long <- fs::dir_ls(here("data", "popmaps", "popmaps-lat-long"), glob = "*.csv") |>
+    map(read_csv, col_types = cols(), col_select = 1:7) |>
+    bind_rows() |>
+    unite(col = "sample", sep = "-", species, id, targetid) |>
+    mutate(sample = str_replace_all(sample, " ", "-"))
+
 ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
     read_tsv(
         col_names = "population",
@@ -328,18 +334,10 @@ Consequently, we're using this method as a more granular approach to determine
 if there is any allele sharing between the populations.
 
 ```{r read-structure}
-structure_pops <- unique(pops$population)[ ! unique(pops$population) %in% ignore ]
-
-# Custom ordering of colour palette
-pal <- c(
-    "#8da0cb", "#66c2a5", "#fc8d62", 
-    "#e78ac3", "#a6d854", "#ffd92f", 
-    "#f0ad4e", "#d9534f", "#5cb85c"
-)
-names(pal) <- 1:9
+# structure_pops <- unique(pops$population)[ ! unique(pops$population) %in% ignore ]
 
 structure_df <- fs::dir_ls(
-    here("results", "population-structure", "structure"), 
+    here("results", "population-structure", "structure-all-updated"), 
     glob = "*plot.csv", 
     recurse = TRUE
 ) |>
@@ -351,15 +349,27 @@ structure_df <- fs::dir_ls(
             pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
             mutate(partition = as.numeric(partition) + 1) |>
             rename(sample = `...1`) |>
-            left_join(pops)
+            left_join(pops) |>
+            left_join(popmap_lat_long)
     }) |>
-    list_rbind() |>
+    bind_rows() |>
     mutate(
         partition = forcats::fct_inorder(as.character(partition)),
         population = str_replace_all(population, "_", " "),
-        population = factor(population, levels = structure_pops),
+        # population = factor(population, levels = structure_pops),
         .by = K
+    ) |>
+    arrange(species, longitude) |>
+    mutate(
+        sample = forcats::fct_inorder(sample),
+        population = forcats::fct_inorder(population)
     )
+
+# Custom ordering of colour palette
+pal <- c(
+    "#ff595e", "#ffca3a", "#8ac926", "#1982c4"
+)
+names(pal) <- 1:4
 ```
 
 ### Choosing the correct K (N-ancestral populations)
@@ -376,7 +386,7 @@ The results for the three species are shown below.
 
 ```{r}
 etable <- fs::dir_ls(
-    here("results", "population-structure", "structure"), 
+    here("results", "population-structure", "structure-all-updated"), 
     glob = "*etable.csv",
     recurse = TRUE
 ) |>
@@ -407,7 +417,7 @@ prb <- etable |>
     scale_y_continuous(
         name = "Estimated mean log-probability",
         breaks = seq(0, -105000, -10000),
-        limits = c(-105e3, -3e4),
+        limits = c(-105e3, -2e4),
         labels = scales::label_number(style_negative = "minus")
     ) +
     scale_x_continuous(breaks = seq(2, 9, 1))
@@ -438,20 +448,36 @@ invisible(dev.off())
 plot_models
 ```
 
-Estimated mean log probabilities are relatively consistent across the first four
-to six K-values in each population, before starting to dip. Delta-K values vary
-quite a bit for *H. major*, in the lower K-values, while *A. laevis* and *H. stokesii*
-peak at `K = 7`. The issue is that the estimated log probabilities don't really
-improve that much for the increasing K, meaning the delta-K peaks are likely a
-product of over-fitting.
+From the figures above, it looks like `K = 3` is the best model fit in *Aipysurus*
+*laevis* and *Hydrophis major*, while `K = 4` appears the be the best fit for
+*Hydrophis stokesii*.
 
 ### *Aipysurus laevis*
 
-Below are the figures for two an three estimated populations.
-
 ```{r}
+pop_groups <- structure_df |>
+    filter(species == "ALA", K == "K3") |> 
+    select(sample, population, species) |>
+    distinct() |>
+    mutate(size = 1) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
 plot_structure_ALA <- structure_df |>
-    filter(species == "ALA", K %in% c("K2", "K3")) |>
+    filter(species == "ALA", K =="K3") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -461,12 +487,7 @@ plot_structure_ALA <- structure_df |>
         labels = as.character(seq(0, 1, 0.5)),
         expand = c(0, 0)
     ) +
-    labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
+    labs(x = NULL) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
         axis.title.y = element_blank(),
@@ -476,13 +497,21 @@ plot_structure_ALA <- structure_df |>
         strip.text.x = element_text(
             face = "bold", 
             hjust = 0.5,
-            size = 14
+            size = 14,
+            angle = 90
         ),
         strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
+    )
+
+plot_structure_ALA <- pop_groups / plot_structure_ALA +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
     )
 
 ragg::agg_png(
@@ -500,12 +529,30 @@ plot_structure_ALA
 
 ### *Hydrophis major*
 
-The figure for *H. major* shows the Shark Bay samples as having a distinct
-genetic profile at $\text{K}=\text{3}$.
-
 ```{r}
+pop_groups <- structure_df |>
+    filter(species == "HMA", K == "K3") |> 
+    select(sample, population, species) |>
+    distinct() |>
+    mutate(size = 1) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
 plot_structure_HMA <- structure_df |>
-    filter(species == "HMA", K %in% c("K2", "K3")) |>
+    filter(species == "HMA", K == "K3") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -515,11 +562,6 @@ plot_structure_HMA <- structure_df |>
         expand = c(0, 0)
     ) +
     labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
         axis.title.y = element_blank(),
@@ -529,13 +571,21 @@ plot_structure_HMA <- structure_df |>
         strip.text.x = element_text(
             face = "bold", 
             hjust = 0.5,
-            size = 14
+            size = 14,
+            angle = 45
         ),
         strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
+    )
+
+plot_structure_HMA <- pop_groups / plot_structure_HMA +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
     )
 
 ragg::agg_png(
@@ -553,14 +603,30 @@ plot_structure_HMA
 
 ### *Hydrophis stokesii*
 
-*H. stokesii* has little evidence to suggest more than two populations in WA.
-The Delta-K figure above indicates `K=4`, but the mean log-probability doesn't
-indicate that the `K=4` model is better than any of others, perhaps suggesting
-over-fitting.
-
 ```{r}
+pop_groups <- structure_df |>
+    filter(species == "HST", K == "K4") |> 
+    select(sample, population, species) |>
+    distinct() |>
+    mutate(size = 1) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
 plot_structure_HST <- structure_df |>
-    filter(species == "HST", K %in% c("K2", "K3" )) |> 
+    filter(species == "HST", K == "K4") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -570,11 +636,6 @@ plot_structure_HST <- structure_df |>
         expand = c(0, 0)
     ) +
     labs(x = NULL) + 
-    facet_grid(
-        rows = vars(K), cols = vars(population),
-        scales = "free_x",
-        space = "free_x"
-    ) +
     guides(fill = guide_legend(title.position = "bottom")) +
     theme(
         axis.title.y = element_blank(),
@@ -589,10 +650,17 @@ plot_structure_HST <- structure_df |>
             angle = 90
         ),
         strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_blank(),
-        panel.spacing.x = unit(0.2, "line"),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
+    )
+
+plot_structure_HST <- pop_groups / plot_structure_HST +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
     )
 
 ragg::agg_png(
@@ -610,33 +678,31 @@ plot_structure_HST
 
 # Isolation by Distance (IBD)
 
-Lastly, we'll perform Isolation-by-distance analysis. The function
-`calc_isolation_by_distance()` from the `snpR` package doesn't like working with
-single samples as the object returned after checking if there is only one sample
-is a dataframe when it should be a vector. Consequently, the matrix/array
-ends up being a single row with multiple columns rather than two columns (long/lat)
-and each sample as rows.
-
-As such, I've edited the function and run the custom version below.
+Lastly, we'll perform Isolation-by-distance analysis. We'll first load the VCF
+data and estimate the genetic distance matrix (Nei's genetic distance).
 
 Note: I also found this repo helpful - https://github.com/jdalapicolla/IBD_models.R
 
 ```{r}
 # Load the snpR library and the custom scripts (found in the scripts directory)
 library(snpR)
+library(marmap)
+library(fossil)
+library(vegan)
 source(here("scripts", "snpR-edited.R"))
 
+# Set the populations
 wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
 
 # Load updated lat/long popmaps
 set.seed(123)
 meta_latLong <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
     (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
-    map(\(x) {
+    purrr::map(\(x) {
         x |>
             read_csv(col_types = cols()) |>
             select(species, id, targetid, pop, latitude, longitude) |>
-            unite(col = "sampID", sep = "-", species, id, targetid) |> 
+            unite(col = "sampID", sep = "-", species, id, targetid) |>
             filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove) |>
             select(sampID, pop, x = longitude, y = latitude) |>
             # For snakes with identical long/lat + population, choose one at random
@@ -655,9 +721,10 @@ vcfs <- fs::dir_ls(
         
         filt_vcf <- filter_snps(
             tmp_vcf,
-            min_ind = 0.8,
-            min_loci = 0.75,
-            re_run = TRUE
+            min_ind = 0.75,
+            min_loci = 0.5,
+            re_run = TRUE,
+            verbose = FALSE
         )
         
         # Subset for samples to keep + add in metadata
@@ -669,89 +736,156 @@ vcfs <- fs::dir_ls(
         
         sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong[[i]])
         
-        filt_vcf <- custom_calc_genetic_distances(filt_vcf, facets = c("sampID", "pop"), method = "Nei")
+        filt_vcf <- custom_calc_genetic_distances(
+            filt_vcf, 
+            facets = c("sampID", "pop"), 
+            method = "Nei"
+        )
         filt_vcf
     })
 ```
 
-After loading the VCF files and performing the mantel test, I generate a summary
-table of the statistics.
+## Mantel statistics and spatial auto-correlation
 
-```{r IBD-mantel}
-# First, get statistics
-mantel_statistics <- vcfs |>
+Next we'll perform the Mantel tests and generate the autocorrelation plots. We're
+using `vegan` to perform Mantel tests as this package has the autocorrelation
+function as well. Consequently, we're not using the in-built IBD function in
+`snpR`.
+
+```{r mantel-tests}
+mantel_results <- vcfs |>
     imap(\(x, i) {
-        tmp <- custom_ibd(
-            x = x,
-            facets = c("sampID", "pop"),
-            genetic_distance_method = "Nei"
+        genMat <- get.snpR.stats(x, facets = "sampID", stats = "genetic_distance")
+        genMat <-as.matrix(genMat$sampID$.base$Nei)
+        
+        lat_long <- meta_latLong[[i]] |>
+            select(3, 4)
+        
+        if(i == "ALA") {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9,
+                resolution = 3, 
+                keep = TRUE
+            )
+        } else if(i == "HMA") {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9, 
+                resolution = 3, keep = TRUE
+            )
+        } else {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9, 
+                resolution = 3, 
+                keep = TRUE
+            )
+        }
+        
+        transMat <- trans.mat(WAcoast) 
+        lcDist <- lc.dist(transMat, lat_long, res = "dist")
+        lcDist <- as.matrix(lcDist)
+        
+        rownames(lcDist) <- meta_latLong[[i]]$sampID
+        colnames(lcDist) <- meta_latLong[[i]]$sampID
+        
+        # Arrange geographic distance matrix by genetic distance matrix
+        lcDist <- lcDist[rownames(genMat), colnames(genMat)]
+        
+        # Grouping data into 200km bins - increases amount of data for correlation
+        classes <- seq(0, round( (max(lcDist, na.rm = TRUE) + 50), digits = -2 ), 200)
+        
+        # Example of running the Mantel statistic using vegan
+        output.mantel <- vegan::mantel(
+            as.dist(genMat),
+            as.dist(lcDist),
+            permutations = 10000
         )
         
-        # Extract statistic results: TODO
-        tmp_stats <- get.snpR.stats(tmp, facets = "sampID", stats = "ibd")
-        tmp_stats <- tmp_stats$sampID$.base$Nei
-        
-        tibble(
-            "Observed correlation" = tmp_stats$obs,
-            "pvalue" = tmp_stats$pvalue,
-            "Std. Obs" = tmp_stats$expvar[[1]],
-            "Expectation" = tmp_stats$expvar[[2]],
-            "Variance" = tmp_stats$expvar[[3]],
-            "Replicates" = tmp_stats$rep
+        output.mantel.summary <- tibble(
+            "Observed correlation" = output.mantel$statistic,
+            "Significance" = output.mantel$signif,
+            "Replicates" = output.mantel$permutations
         )
+        
+        # Correlog analysis - binned data
+        output.mantel.correlog <- vegan::mantel.correlog(
+            D.eco = as.dist(genMat),
+            D.geo = as.dist(lcDist),
+            break.pts = classes,
+            nperm = 10000,
+            progressive = TRUE,
+            cutoff = FALSE
+        )
+        
+        list(
+            "mantel" = output.mantel.summary,
+            "correlog" = output.mantel.correlog,
+            "genetic_dist" = genMat,
+            "geo_dist" = lcDist
+        )
+    })
+
+mantel_results |>
+    purrr::map(\(x) {
+        x$mantel
     }) |>
-    list_rbind(names_to = "species")
-
-# Write to file
-mantel_statistics |>
-    write_csv(here("results", "population-structure", "mantel-statistics.csv"))
-
-mantel_statistics |>
-    gt(rowname_col = "species") |>
-    gt::fmt_number(columns = c(2,3,4,5,6), n_sigfig = 2) |>
+    bind_rows(.id = "Species") |>
+    gt() |>
+    fmt_number(
+        columns = c("Observed correlation", "Significance"),
+        decimals = 4
+    ) |>
+    fmt_number(
+        columns = "Replicates", use_seps = TRUE, drop_trailing_zeros = TRUE
+    ) |>
     as_raw_html()
 ```
+
+## IBD visualisation
+
+### Geographic distance vs Genetic distance
 
 Lastly, let's generate a scatter plot of distance vs genetic distance. Add the
 correlation coefficients and p-values in Inkscape or something.
 
 ```{r}
-df_long <- vcfs |>
+df_gen_geo <- mantel_results |>
     imap(\(x, i) {
-        tmp <- custom_ibd(
-            x = x,
-            facets = c("sampID", "pop"),
-            genetic_distance_method = "Nei"
-        )
+        genDist <- x[["genetic_dist"]]
+        geoDist <- x[["geo_dist"]]
         
-        # Dataframe for plotting
-        mta <- get.snpR.stats(tmp, facets = "sampID", "geo_dist")
-        mta <- as.matrix(mta$sampID$Nei)
-        mta[upper.tri(mta, diag = T)] = NA
-        geo_dist <- mta |>
+        # Reformat genetic distance matrix
+        genDist[upper.tri(genDist, diag = T)] = NA
+        genDist <- genDist |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2","GenDist")) |>
+            as_tibble()
+        
+        # Reformat geographic distance matrix
+        geoDist[upper.tri(geoDist, diag = T)] = NA
+        geoDist <- geoDist |>
             reshape2::melt() |>
             na.omit() |>
             arrange(Var1) |>
             setNames(c("X1", "X2","GeoDist")) |>
             as_tibble()
         
-        mta <- get.snpR.stats(tmp, facets = "sampID", "genetic_distance")
-        mta <- as.matrix(mta$sampID$.base$Nei)
-        mta[upper.tri(mta, diag = T)] = NA
-        gen_dist <- mta |>
-            reshape2::melt() |>
-            na.omit() |>
-            arrange(Var1) |>
-            setNames(c("X1", "X2", "GenDist")) |>
-            as_tibble()
-        
-        left_join(gen_dist, geo_dist)
-        
+        left_join(genDist, geoDist) |>
+            na.omit()
     }) |>
-    list_rbind(names_to = "species")
+    bind_rows(.id = "species") |>
+    mutate(species = case_when(
+        species == "ALA" ~ "Aipysurus laevis",
+        species == "HMA" ~ "Hydrophis major",
+        species == "HST" ~ "Hydrophis stokesii"
+    ))
 
 # Plot distance (kilometres) vs genetic distance (Nei)
-plot_scatter <- df_long |>
+plot_scatter <- df_gen_geo |>
     ggplot(aes(x = GeoDist, y = GenDist, colour = species)) +
     geom_point(alpha = 0.4) +
     geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
@@ -787,4 +921,77 @@ invisible(dev.off())
 
 plot_scatter
 ``` 
+
+### Spatial auto-correlation
+
+```{r}
+plots <- mantel_results |>
+    purrr::map(\(x) {
+        tmp <- x$correlog$mantel.res |>
+            as_tibble()
+        
+        tmp |>
+            mutate(
+                classification = case_when(
+                    `Mantel.cor` < 0 & `Pr(corrected)` < 0.05 ~ "Lower",
+                    `Mantel.cor` > 0 & `Pr(corrected)` < 0.05 ~ "Higher",
+                    .default = "Neutral"
+                ),
+                classification = factor(classification, levels = c("Higher", "Neutral", "Lower"))
+            ) |>
+            ggplot(aes(x = class.index, y = Mantel.cor)) +
+            geom_hline(yintercept = 0, colour = "red") +
+            geom_line(colour = "black") +
+            geom_point(
+                mapping = aes(fill = classification), 
+                shape = 22, 
+                size = 4, 
+                show.legend = TRUE, 
+                colour = "black"
+            ) +
+            labs(
+                x = "Least-cost distance (KM)",
+                y = "Mantel correlation",
+                fill = NULL
+            ) +
+            scale_fill_manual(values = c("#00BA38", "grey80", "#619CFF"), drop = FALSE) +
+            scale_y_continuous(
+                limits = c(-0.3, 0.2),
+                breaks = seq(-0.3, 0.2, 0.1),
+                labels = c("0.3", "-0.2", "-0.1", "0", "0.1", "0.2"),
+                expand = c(0.01, 0)
+            ) +
+            scale_x_continuous(
+                limits = c(0, (max(tmp$class.index) + 100) ),
+                breaks = seq(0, ( max(tmp$class.index) + 100), 200 ),
+                labels = seq(0, ( max(tmp$class.index) + 100), 200 ),
+                expand = c(0.01, 0)
+            ) +
+            guides(fill = guide_legend(override.aes = list(size = 6))) +
+            theme(
+                axis.text = element_text(size = 14),
+                axis.title = element_text(size = 16),
+                legend.text = element_text(size = 14)
+            )
+    })
+
+design <- "12\n34"
+
+plot_correlog <- plots$ALA + plots$HMA + plots$HST + guide_area() +
+    plot_layout(
+        design = design,
+        guides = "collect",
+        axes = "collect"
+    )
+
+cairo_pdf(
+    here("results", "population-structure", "mantel-correlog.pdf"),
+    width = 12, height = 12
+)
+plot_correlog
+invisible(dev.off())
+
+plot_correlog
+```
+
 
