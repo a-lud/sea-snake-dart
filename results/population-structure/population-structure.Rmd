@@ -40,7 +40,7 @@ pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
     )
 
 popmap_lat_long <- fs::dir_ls(here("data", "popmaps", "popmaps-lat-long"), glob = "*.csv") |>
-    map(read_csv, col_types = cols(), col_select = 1:7) |>
+    purrr::map(read_csv, col_types = cols(), col_select = 1:7) |>
     bind_rows() |>
     unite(col = "sample", sep = "-", species, id, targetid) |>
     mutate(sample = str_replace_all(sample, " ", "-"))
@@ -334,8 +334,6 @@ Consequently, we're using this method as a more granular approach to determine
 if there is any allele sharing between the populations.
 
 ```{r read-structure}
-# structure_pops <- unique(pops$population)[ ! unique(pops$population) %in% ignore ]
-
 structure_df <- fs::dir_ls(
     here("results", "population-structure", "structure-all-updated"), 
     glob = "*plot.csv", 
