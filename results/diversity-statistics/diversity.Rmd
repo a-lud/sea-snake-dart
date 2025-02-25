@@ -269,6 +269,7 @@ within <- stats_within |>
     ) |>
     list_rbind(names_to = "species") |>
     left_join(pixy_pi, by = join_by(species, subfacet == pop)) |>
+    mutate(subfacet = factor(subfacet, levels = pop_levels)) |>
     select(
         Species = species,
         Population = subfacet,
@@ -278,7 +279,8 @@ within <- stats_within |>
         Ho = weighted_mean_ho, He  = weighted_mean_he,
         Fis = weighted_mean_fis,
         -facet
-    )
+    ) |>
+    arrange(Species, Population)
 
 # Write to file
 within |>
