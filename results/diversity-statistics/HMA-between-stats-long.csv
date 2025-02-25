@@ -1,49 +1,49 @@
 population,population2,values,tri_partition
+"Shark
+Bay","Shark
+Bay",NA,diagonal
+"Shark
+Bay","Coastal
+WA",0.043214464808805336,upper
+"Shark
+Bay","Gulf of
+Carpentaria",0.08779277326454608,upper
+"Shark
+Bay","New
+Caledonia",0.25931614804508,upper
+"Coastal
+WA","Shark
+Bay",0.006227686665753501,lower
 "Coastal
 WA","Coastal
 WA",NA,diagonal
 "Coastal
 WA","Gulf of
-Carpentaria",0.032848724189541455,upper
+Carpentaria",0.03303586334969584,upper
 "Coastal
 WA","New
-Caledonia",0.18568365360870515,upper
-"Coastal
-WA","Shark
-Bay",0.04207300212325602,upper
+Caledonia",0.1865788908514333,upper
+"Gulf of
+Carpentaria","Shark
+Bay",0.010784906696559748,lower
 "Gulf of
 Carpentaria","Coastal
-WA",0.0042725972473954205,lower
+WA",0.004285299054256887,lower
 "Gulf of
 Carpentaria","Gulf of
 Carpentaria",NA,diagonal
 "Gulf of
 Carpentaria","New
-Caledonia",0.17404995873041448,upper
-"Gulf of
-Carpentaria","Shark
-Bay",0.08616193842814501,upper
+Caledonia",0.17306613010875377,upper
+"New
+Caledonia","Shark
+Bay",0.025099559079291713,lower
 "New
 Caledonia","Coastal
-WA",0.018877537718152402,lower
+WA",0.018851999654210486,lower
 "New
 Caledonia","Gulf of
-Carpentaria",0.017878309764825493,lower
+Carpentaria",0.01772313268539906,lower
 "New
 Caledonia","New
 Caledonia",NA,diagonal
-"New
-Caledonia","Shark
-Bay",0.25859665394774123,upper
-"Shark
-Bay","Coastal
-WA",0.006119206274802823,lower
-"Shark
-Bay","Gulf of
-Carpentaria",0.0105672045880631,lower
-"Shark
-Bay","New
-Caledonia",0.025210913081335988,lower
-"Shark
-Bay","Shark
-Bay",NA,diagonal

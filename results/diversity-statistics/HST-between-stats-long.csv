@@ -3,26 +3,26 @@ population,population2,values,tri_partition
 WA","Coastal
 WA",NA,diagonal
 "Coastal
-WA","Gulf of
-Carpentaria",0.17237924114443073,upper
-"Coastal
 WA","Offshore
-WA",0.08585427833438272,upper
-"Gulf of
-Carpentaria","Coastal
-WA",0.013405673642845353,lower
-"Gulf of
-Carpentaria","Gulf of
-Carpentaria",NA,diagonal
-"Gulf of
-Carpentaria","Offshore
-WA",0.21764122921680912,upper
+WA",0.09668935441942655,upper
+"Coastal
+WA","Gulf of
+Carpentaria",0.16877137643003493,upper
 "Offshore
 WA","Coastal
-WA",0.00848699568821218,lower
-"Offshore
-WA","Gulf of
-Carpentaria",0.018905772370422277,lower
+WA",0.008186676805786622,lower
 "Offshore
 WA","Offshore
 WA",NA,diagonal
+"Offshore
+WA","Gulf of
+Carpentaria",0.1993720513645606,upper
+"Gulf of
+Carpentaria","Coastal
+WA",0.012167324958586408,lower
+"Gulf of
+Carpentaria","Offshore
+WA",0.01744178903309488,lower
+"Gulf of
+Carpentaria","Gulf of
+Carpentaria",NA,diagonal
