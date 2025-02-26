@@ -1,6 +1,6 @@
 Population structure
 ================
-2025-02-21
+2025-02-26
 
 - [Helper functions](#helper-functions)
 - [Removed samples](#removed-samples)
@@ -13,6 +13,10 @@ Population structure
     - [*Aipysurus laevis*](#aipysurus-laevis)
     - [*Hydrophis major*](#hydrophis-major)
     - [*Hydrophis stokesii*](#hydrophis-stokesii)
+  - [STRUCTURE: WA coast samples](#structure-wa-coast-samples)
+    - [*Aipysurus laevis*](#aipysurus-laevis-1)
+    - [*Hydrophis major*](#hydrophis-major-1)
+    - [*Hydrophis stokesii*](#hydrophis-stokesii-1)
 - [Isolation by Distance (IBD)](#isolation-by-distance-ibd)
   - [Mantel statistics and spatial
     auto-correlation](#mantel-statistics-and-spatial-auto-correlation)
@@ -373,7 +377,7 @@ etable |>
     as_raw_html()
 ```
 
-<div id="mdptrdqxhk" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="bmknkjzzcs" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -595,7 +599,7 @@ plot_structure_ALA <- pop_groups / plot_structure_ALA +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    filename = here("results", "population-structure", "structure-ALA.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -671,7 +675,7 @@ plot_structure_HMA <- pop_groups / plot_structure_HMA +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HMA-WA.png"),
+    filename = here("results", "population-structure", "structure-HMA.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -748,7 +752,7 @@ plot_structure_HST <- pop_groups / plot_structure_HST +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HST-WA.png"),
+    filename = here("results", "population-structure", "structure-HST.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -761,6 +765,276 @@ plot_structure_HST
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
+
+## STRUCTURE: WA coast samples
+
+``` r
+structure_df_wa <- fs::dir_ls(
+    here("results", "population-structure", "structure"), 
+    glob = "*plot.csv", 
+    recurse = TRUE
+) |>
+    map(\(x) {
+        tmp <- x |>
+            read_csv(col_names = TRUE, col_types = cols())
+        tmp |>
+            mutate(K = glue::glue("K{ncol(tmp) - 1}")) |>
+            pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
+            mutate(partition = as.numeric(partition) + 1) |>
+            rename(sample = `...1`) |>
+            left_join(pops) |>
+            left_join(popmap_lat_long)
+    }) |>
+    bind_rows() |>
+    mutate(
+        partition = forcats::fct_inorder(as.character(partition)),
+        population = str_replace_all(population, "_", " "),
+        population = factor(pop, levels = wa_pops),
+        .by = K
+    ) |>
+    arrange(species, longitude) |>
+    mutate(sample = forcats::fct_inorder(sample))
+```
+
+### *Aipysurus laevis*
+
+``` r
+pop_groups <- structure_df_wa |>
+    filter(species == "ALA", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_ALA_wa <- structure_df_wa |>
+    filter(species == "ALA", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_ALA_wa <- pop_groups / plot_structure_ALA_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_ALA_wa
+invisible(dev.off())
+
+plot_structure_ALA_wa
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
+
+### *Hydrophis major*
+
+``` r
+pop_groups <- structure_df_wa |>
+    filter(species == "HMA", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_HMA_wa <- structure_df_wa |>
+    filter(species == "HMA", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_HMA_wa <- pop_groups / plot_structure_HMA_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HMA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HMA_wa
+invisible(dev.off())
+
+plot_structure_HMA_wa
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-9-1.png" width="100%" />
+
+### *Hydrophis stokesii*
+
+``` r
+pop_groups <- structure_df_wa |>
+    filter(species == "HST", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_HST_wa <- structure_df_wa |>
+    filter(species == "HST", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_HST_wa <- pop_groups / plot_structure_HST_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HST-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HST_wa
+invisible(dev.off())
+
+plot_structure_HST_wa
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-10-1.png" width="100%" />
 
 # Isolation by Distance (IBD)
 
@@ -778,9 +1052,6 @@ library(marmap)
 library(fossil)
 library(vegan)
 source(here("scripts", "snpR-edited.R"))
-
-# Set the populations
-wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
 
 # Load updated lat/long popmaps
 set.seed(123)
@@ -1133,7 +1404,7 @@ invisible(dev.off())
 plot_scatter
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-12-1.png" width="100%" />
 
 ### Spatial auto-correlation
 
@@ -1207,4 +1478,4 @@ invisible(dev.off())
 plot_correlog
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-9-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-13-1.png" width="100%" />

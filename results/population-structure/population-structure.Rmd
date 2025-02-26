@@ -27,6 +27,9 @@ suppressPackageStartupMessages({
 
 theme_set(theme_bw())
 
+# Set the populations
+wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
+
 pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
     read_delim(
         delim = " ", 
@@ -39,7 +42,10 @@ pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
         species = str_remove(basename(species), "-.*")
     )
 
-popmap_lat_long <- fs::dir_ls(here("data", "popmaps", "popmaps-lat-long"), glob = "*.csv") |>
+popmap_lat_long <- fs::dir_ls(
+    here("data", "popmaps", "popmaps-lat-long"), 
+    glob = "*.csv"
+) |>
     purrr::map(read_csv, col_types = cols(), col_select = 1:7) |>
     bind_rows() |>
     unite(col = "sample", sep = "-", species, id, targetid) |>
@@ -513,7 +519,7 @@ plot_structure_ALA <- pop_groups / plot_structure_ALA +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    filename = here("results", "population-structure", "structure-ALA.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -587,7 +593,7 @@ plot_structure_HMA <- pop_groups / plot_structure_HMA +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HMA-WA.png"),
+    filename = here("results", "population-structure", "structure-HMA.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -662,7 +668,7 @@ plot_structure_HST <- pop_groups / plot_structure_HST +
     )
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HST-WA.png"),
+    filename = here("results", "population-structure", "structure-HST.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
@@ -672,6 +678,270 @@ plot_structure_HST
 invisible(dev.off())
 
 plot_structure_HST
+```
+
+## STRUCTURE: WA coast samples
+
+```{r}
+structure_df_wa <- fs::dir_ls(
+    here("results", "population-structure", "structure"), 
+    glob = "*plot.csv", 
+    recurse = TRUE
+) |>
+    map(\(x) {
+        tmp <- x |>
+            read_csv(col_names = TRUE, col_types = cols())
+        tmp |>
+            mutate(K = glue::glue("K{ncol(tmp) - 1}")) |>
+            pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
+            mutate(partition = as.numeric(partition) + 1) |>
+            rename(sample = `...1`) |>
+            left_join(pops) |>
+            left_join(popmap_lat_long)
+    }) |>
+    bind_rows() |>
+    mutate(
+        partition = forcats::fct_inorder(as.character(partition)),
+        population = str_replace_all(population, "_", " "),
+        population = factor(pop, levels = wa_pops),
+        .by = K
+    ) |>
+    arrange(species, longitude) |>
+    mutate(sample = forcats::fct_inorder(sample))
+```
+
+### *Aipysurus laevis*
+
+```{r}
+pop_groups <- structure_df_wa |>
+    filter(species == "ALA", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_ALA_wa <- structure_df_wa |>
+    filter(species == "ALA", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_ALA_wa <- pop_groups / plot_structure_ALA_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_ALA_wa
+invisible(dev.off())
+
+plot_structure_ALA_wa
+```
+
+### *Hydrophis major*
+
+```{r}
+pop_groups <- structure_df_wa |>
+    filter(species == "HMA", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_HMA_wa <- structure_df_wa |>
+    filter(species == "HMA", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_HMA_wa <- pop_groups / plot_structure_HMA_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HMA-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HMA_wa
+invisible(dev.off())
+
+plot_structure_HMA_wa
+```
+
+### *Hydrophis stokesii*
+
+```{r}
+pop_groups <- structure_df_wa |>
+    filter(species == "HST", K == "K3") |> 
+    select(sample, population = pop, species) |>
+    distinct() |>
+    mutate(
+        size = 1,
+        population = str_replace_all(population, "_", " ")
+    ) |>
+    ggplot(aes(x = sample, y = size, fill = population)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = pal_PCA) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL) + 
+    theme(
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank()
+    )
+
+plot_structure_HST_wa <- structure_df_wa |>
+    filter(species == "HST", K == "K3") |>
+    ggplot(aes(x = sample, y = proportion, fill = partition)) +
+    geom_col(position = "stack") +
+    scale_fill_manual(values = pal) +
+    scale_y_continuous(
+        breaks = c(0, 0.5, 1),
+        labels = as.character(seq(0, 1, 0.5)),
+        expand = c(0, 0)
+    ) +
+    labs(x = NULL) + 
+    guides(fill = guide_legend(title.position = "bottom")) +
+    theme(
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        legend.position = "bottom",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.x = element_text(
+            face = "bold", 
+            hjust = 0.1,
+            vjust = 0.5,
+            size = 14,
+            angle = 90
+        ),
+        strip.text.y = element_text(size = 14, hjust = 0.5),
+        strip.background = element_rect(fill='transparent', colour = NA),
+        panel.spacing.x = unit(0.4, "line"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+    )
+
+plot_structure_HST_wa <- pop_groups / plot_structure_HST_wa +
+    plot_layout(heights = c(1,4), axes = "collect") &
+    theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HST-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_structure_HST_wa
+invisible(dev.off())
+
+plot_structure_HST_wa
 ```
 
 # Isolation by Distance (IBD)
@@ -688,9 +958,6 @@ library(marmap)
 library(fossil)
 library(vegan)
 source(here("scripts", "snpR-edited.R"))
-
-# Set the populations
-wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
 
 # Load updated lat/long popmaps
 set.seed(123)
