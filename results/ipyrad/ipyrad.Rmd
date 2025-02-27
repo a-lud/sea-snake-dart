@@ -209,7 +209,7 @@ plot_usable_loci <- stats |>
     geom_boxplot(show.legend = FALSE) +
     scale_fill_brewer(palette = "Set1") +
     scale_y_continuous(
-        name = "Assembled loci",
+        name = "Assembled Loci in Reference Genome",
         limits = c(0, 45000), 
         breaks = seq(0, 45000, 5000),
         labels = scales::label_number(big.mark = ","),
