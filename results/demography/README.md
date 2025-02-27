@@ -94,13 +94,7 @@ df_msmc |>
 ``` r
 # ---------------------------------------------------------------------------- #
 # MSMC2 stairway plot
-ragg::agg_png(
-    filename = here("results", "demography", "msmc.png"),
-    width = 1200, height = 1200,
-    units = "px",
-    res = 150
-)
-df_msmc |>
+plot_stairway <- df_msmc |>
     # Removal of an obviously aberrant signal in distant past
     filter(Ne <= 3e6, clock == "2*2+25*1+2*3", Ne <= 1.5e6) |>
     ggplot(
@@ -139,5 +133,16 @@ df_msmc |>
         panel.background = element_blank(),
         axis.line = element_line(colour = "black", linewidth = 0.7)
     )
+ragg::agg_png(
+    filename = here("results", "demography", "msmc.png"),
+    width = 1200, height = 1200,
+    units = "px",
+    res = 150
+)
+plot_stairway
 invisible(dev.off())
+
+plot_stairway
 ```
+
+<img src="demography_files/figure-gfm/msmc-data-1.png" width="100%" />
