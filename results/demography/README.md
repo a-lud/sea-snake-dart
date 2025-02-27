@@ -106,6 +106,7 @@ plot_stairway <- df_msmc |>
     ) +
     geom_step(linewidth = 1.4) +
     scale_x_log10(
+        limits = c(3e4, 110e6),
         labels = scales::label_number(scale = 1e-6, drop0trailing = TRUE)
     ) +
     annotation_logticks(sides = 'b', outside = TRUE, ) +
@@ -138,6 +139,12 @@ plot_stairway <- df_msmc |>
         panel.background = element_blank(),
         axis.line = element_line(colour = "black", linewidth = 0.7)
     )
+plot_stairway
+```
+
+<img src="demography_files/figure-gfm/msmc-data-1.png" width="100%" />
+
+``` r
 ragg::agg_png(
     filename = here("results", "demography", "msmc.png"),
     width = 1200, height = 1200,
@@ -150,4 +157,4 @@ invisible(dev.off())
 plot_stairway
 ```
 
-<img src="demography_files/figure-gfm/msmc-data-1.png" width="100%" />
+<img src="demography_files/figure-gfm/msmc-data-2.png" width="100%" />
