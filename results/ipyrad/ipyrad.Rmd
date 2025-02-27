@@ -51,17 +51,17 @@ stats <- fs::dir_ls(path = here("results", "ipyrad"), glob = "*stats.txt", recur
     map(\(x) {
         lines <- x |>
             read_lines(skip_empty_rows = TRUE)
-
+        
         start <- grep(x = lines, "## Final Sample stats summary") + 1
         end <- grep(x = lines, "## Alignment matrix statistics:") - 1
-
+        
         keep <- lines[start:end]
         keep <- keep[1] |>
             trimws(which = "left") |>
             strsplit(split = " ") |>
             unlist()
         colnames <- c("sample", keep[nzchar(keep)])
-
+        
         tibble( col = lines[(start + 1):end] ) |>
             separate(col = col, into = colnames, sep = "\\s+", convert = TRUE) |>
             select(-state) |>
@@ -116,6 +116,130 @@ stats |>
 After running `Ipyrad`, we get a range of summary information detailing how much
 of our QC'd data is actually used in the analysis. The figures below broadly
 summarise this information.
+
+### Species summaries
+
+Below we summarise a range of measures across all samples in each species.
+
+```{r}
+stats_sp_summary <- stats |>
+    summarise(
+        avg_raw_reads = mean(reads_raw, na.rm = TRUE), 
+        sd_raw_reads = sd(reads_raw, na.rm = TRUE), 
+        avg_reads_qc = mean(reads_qc, na.rm = TRUE),
+        sd_reads_qc = sd(reads_qc, na.rm = TRUE),
+        avg_mapped_reads = mean(refseq_mapped_reads, na.rm = TRUE),
+        sd_mapped_reads = sd(refseq_mapped_reads, na.rm = TRUE),
+        mapping_pct = mean(refseq_mapped_reads/reads_qc, na.rm = TRUE) * 100,
+        filtered = mean(reads_raw - reads_qc, na.rm = TRUE),
+        loss_pct = 100 - (mean(reads_qc/reads_raw, na.rm = TRUE) * 100),
+        avg_loci_in_assembly = mean(loci_in_assembly, na.rm = TRUE),
+        sd_loci_in_assembly = sd(loci_in_assembly, na.rm = TRUE),
+        .by = c(Species)
+    )
+
+stats_sp_summary |>
+    write_csv(file = here("results", "ipyrad", "summarised-read-ipyrad-qc.csv"))
+
+stats_sp_summary |>
+    gt() |>
+    as_raw_html()
+```
+
+```{r}
+plot_raw_qc_reads <- stats |>
+    pivot_longer(names_to = "measures", values_to = "values", 4:ncol(stats)) |>
+    filter(measures %in% c("reads_raw", "reads_qc")) |>
+    mutate(
+        measures = ifelse(measures == "reads_raw", "Raw", "QC"),
+        measures = forcats::fct_inorder(measures),
+        Species = case_when(
+            Species == "ALA" ~ "Aipysurus laevis",
+            Species == "HMA" ~ "Hydrophis major",
+            Species == "HST" ~ "Hydrophis stokesii"
+        ),
+        Species = str_wrap(Species, width = 10)
+    ) |>
+    ggplot(
+        aes(
+            x = Species, 
+            y = values, 
+            fill = Species, 
+            alpha = measures, 
+            group = interaction(Species, measures)
+        )
+    ) +
+    geom_boxplot(show.legend = FALSE) +
+    scale_fill_brewer(palette = "Set1") +
+    scale_alpha_discrete(range = c(1, 0.4)) +
+    scale_y_continuous(
+        name = "Read counts (M)",
+        limits = c(0, 2.5e6),
+        breaks = seq(0, 2.5e6, 250e3),
+        labels = scales::number_format(scale = 1e-6, drop0trailing=TRUE),
+        expand = c(0, 0)
+    ) +
+    theme(
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 14, face = "italic"),
+        axis.title.y = element_text(size = 16),
+        axis.text.y = element_text(size = 14),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank()
+    )
+
+# Usable assembled loci in assembly
+plot_usable_loci <- stats |>
+    select(Species, loci_in_assembly) |>
+    mutate(
+        Species = case_when(
+            Species == "ALA" ~ "Aipysurus laevis",
+            Species == "HMA" ~ "Hydrophis major",
+            Species == "HST" ~ "Hydrophis stokesii"
+        ),
+        Species = str_wrap(Species, width = 10)
+    ) |>
+    ggplot(
+        aes(
+            x = Species, 
+            y = loci_in_assembly, 
+            fill = Species
+        )
+    ) +
+    geom_boxplot(show.legend = FALSE) +
+    scale_fill_brewer(palette = "Set1") +
+    scale_y_continuous(
+        name = "Assembled loci",
+        limits = c(0, 45000), 
+        breaks = seq(0, 45000, 5000),
+        labels = scales::label_number(big.mark = ","),
+        expand = c(0,0),
+        position = "right"
+    ) +
+    theme(
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 14, face = "italic"),
+        axis.title.y = element_text(size = 16),
+        axis.text.y = element_text(size = 14),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank()
+    )
+
+# Part A of figure 1
+qc_summary <- plot_raw_qc_reads | plot_usable_loci
+
+ragg::agg_png(
+    filename = here("results", "ipyrad", "read-ipyrad-summary.png"),
+    width = 1500, 
+    height = 1500,
+    units = "px",  
+    res = 150
+)
+qc_summary
+invisible(dev.off())
+
+qc_summary
+```
 
 ### Read summary
 
