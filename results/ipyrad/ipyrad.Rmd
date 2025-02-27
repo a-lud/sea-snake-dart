@@ -76,25 +76,11 @@ stats <- fs::dir_ls(path = here("results", "ipyrad"), glob = "*stats.txt", recur
                 everything(),
                 -num_seqs_Trimmed
             )
-    })
-
-# Write summary table to file for each species
-stats |>
-    iwalk(\(x, i) {
-        x |>
-            write_csv(
-                file = here(
-                    "results",
-                    "ipyrad",
-                    glue::glue("{i}-stringent_outfiles"),
-                    glue::glue("{i}-stringent-stats.csv")
-                )
-            )
-    })
-
-# Combine list and preview table
-stats <- stats |>
+    }) |>
     list_rbind(names_to = "Species")
+
+# Write QC to file
+write_csv(stats, here("results", "ipyrad", "sample-read-ipyrad-qc-statistics.csv"))
 
 stats |>
     head() |>
@@ -308,7 +294,7 @@ within each species.
 
 Samples with low loci counts are likely to be limiting factors in downstream
 analysis - samples with few loci are always going to cause issues when filtering
-on percent-missing etc... Therefore, these samples are likely candiates that
+on percent-missing etc... Therefore, these samples are likely candidates that
 should be removed.
 
 ```{r}

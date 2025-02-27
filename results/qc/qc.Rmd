@@ -63,7 +63,8 @@ data <- fs::dir_ls(
         id = forcats::fct_inorder(id),
         file = str_remove(file, "\\..*")
     ) |>
-    left_join(meta, by = join_by(file == id_clean))
+    right_join(meta, by = join_by(file == id_clean)) |>
+    filter(file != "NANA-KLS1121-2133089")
 ```
 
 ## Read counts before/after QC pipeline
@@ -78,7 +79,7 @@ data |>
     mutate(across(c(id, Species), str_to_sentence)) |>
     select(id, Species, Region, file, num_seqs, sum_len) |>
     pivot_wider(names_from = id, values_from = c(num_seqs, sum_len)) |>
-    arrange(Species, Region, -sum_len_Trimmed) |>
+    arrange(Species, Region, -sum_len_Trimmed) |> 
     write_csv(file = here("results", "qc", "raw_trimmed_reads_bases.csv"))
 ```
 
