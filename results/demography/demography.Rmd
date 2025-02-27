@@ -112,7 +112,12 @@ plot_stairway <- df_msmc |>
     ) +
     annotation_logticks(sides = 'b', outside = TRUE, ) +
     coord_cartesian(clip = "off" ) +
-    scale_y_continuous(labels = scales::label_number(scale = 1e-6)) +
+    scale_y_continuous(
+        limits = c(0, 1.5e6),
+        breaks = seq(0, 1.5e6, 2.5e5),
+        labels = scales::label_number(scale = 1e-6),
+        expand = c(0, 0)
+    ) +
     labs(
         y = bquote("Effective population size "~(N[e]~x~10^6)),
         x = bquote("Years ago (x10"^6*')')
