@@ -19,6 +19,7 @@ knitr::opts_chunk$set(
 )
 
 suppressPackageStartupMessages({
+    library(paletteer)
     library(tidyverse)
     library(patchwork)
     library(here)
@@ -253,11 +254,8 @@ df_variance <- fs::dir_ls(here("results", "population-structure", "pca"), glob =
 ```{r get-legend}
 # Custom ordering of colour palette
 pal_PCA <- c(
-    "#8da0cb", "#66c2a5", "#fc8d62", 
-    "#e78ac3", "#a6d854", "#ffd92f", 
-    "#f0ad4e", "#d9534f", "#5cb85c",
-    "#66C2A5", "#FC8D62", "#8DA0CB",
-    "#B3B3B3"
+    "#DCB0F2FF","#F89C74FF", "#F6CF71FF", "#66C5CCFF","#FE88B1FF", "#87C55FFF",
+    "#B497E7FF", "#B3B3B3FF", "#C9DB74FF", "#9EB9F3FF", "#D3B484FF", "#8BE0A4FF"
 )
 names(pal_PCA) <- pop_levels
 ```
@@ -982,14 +980,17 @@ vcfs <- fs::dir_ls(
 ) |>
     (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
     imap(\(v,i) {
+        filter_val <- case_when(
+            i == "ALA" ~ 0.9, 
+            i == "HMA" ~ 0.9, 
+            i == "HST" ~ 0.95
+        )
         tmp_vcf <- read_vcf(file = v)
         
         filt_vcf <- filter_snps(
             tmp_vcf,
-            min_ind = 0.75,
-            min_loci = 0.5,
-            re_run = TRUE,
-            verbose = FALSE
+            min_ind = filter_val,
+            re_run = "full"
         )
         
         # Subset for samples to keep + add in metadata
@@ -1151,6 +1152,7 @@ df_gen_geo <- mantel_results |>
 
 # Plot distance (kilometres) vs genetic distance (Nei)
 plot_scatter <- df_gen_geo |>
+    mutate(species = factor(species, levels = c("Aipysurus laevis", "Hydrophis major", "Hydrophis stokesii"))) |>
     ggplot(aes(x = GeoDist, y = GenDist, colour = species)) +
     geom_point(alpha = 0.4) +
     geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
@@ -1167,13 +1169,13 @@ plot_scatter <- df_gen_geo |>
         limits = c(0, 0.055),
         expand = c(0.02, 0)
     ) +
-    scale_colour_brewer(palette = "Set2") +
+    scale_colour_brewer(palette = "Set1") +
     guides(colour = guide_legend(override.aes = list(size = 6))) +
     theme(
         axis.text = element_text(size = 14),
         axis.title = element_text(size = 16),
         legend.position = "top",
-        legend.text = element_text(size = 14),
+        legend.text = element_text(size = 14, face = "italic"),
         legend.title = element_blank()
     )
 
@@ -1191,7 +1193,12 @@ plot_scatter
 
 ```{r}
 plots <- mantel_results |>
-    purrr::map(\(x) {
+    purrr::imap(\(x, i) {
+        spc <- case_when(
+            i == "ALA" ~ "Aipysurus laevis",
+            i == "HMA" ~ "Hydrophis major",
+            i == "HST" ~ "Hydrophis stokesii"
+        )
         tmp <- x$correlog$mantel.res |>
             as_tibble()
         
@@ -1217,7 +1224,8 @@ plots <- mantel_results |>
             labs(
                 x = "Least-cost distance (KM)",
                 y = "Mantel correlation",
-                fill = NULL
+                fill = NULL,
+                title = spc
             ) +
             scale_fill_manual(values = c("#00BA38", "grey80", "#619CFF"), drop = FALSE) +
             scale_y_continuous(
@@ -1236,7 +1244,8 @@ plots <- mantel_results |>
             theme(
                 axis.text = element_text(size = 14),
                 axis.title = element_text(size = 16),
-                legend.text = element_text(size = 14)
+                legend.text = element_text(size = 14),
+                plot.title = element_text(face = "italic", hjust = 0.5)
             )
     })
 
