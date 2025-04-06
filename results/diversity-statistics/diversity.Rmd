@@ -148,8 +148,7 @@ vcfs <- fs::dir_ls(
         filt_vcf <- filter_snps(
             tmp_vcf,
             min_ind = 0.75,
-            min_loci = 0.5,
-            re_run = TRUE
+            re_run = "full"
         )
         
         # Subset for samples to keep + add in metadata
@@ -347,7 +346,7 @@ stats_within |>
 
 ```{r get-fst}
 df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
-
+    
     # Grab Nei genetic distance matrix
     nei <- stats_between[[id]] |> 
         pluck("pop") |> 
@@ -361,7 +360,7 @@ df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
     # Nei - Re-order matrices so the data are West to East
     nei <- nei[pop_order, pop_order]
     nei[upper.tri(nei)] <- NA
-
+    
     # Fst - should already be ordered
     fst <-  stats_within[[id]] |>
         pluck("fst.updated")
@@ -389,10 +388,10 @@ df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
             population = forcats::fct_inorder(population),
             population2 = forcats::fct_inorder(population2)
         )
-
+    
     list(new_long, new)
 }) |>
-set_names(c("ALA", "HMA", "HST"))
+    set_names(c("ALA", "HMA", "HST"))
 ```
 
 ## Write pairwise distance results

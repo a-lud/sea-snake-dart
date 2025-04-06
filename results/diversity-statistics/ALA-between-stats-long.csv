@@ -4,73 +4,73 @@ Bay","Shark
 Bay",NA,diagonal
 "Shark
 Bay","Coastal
-WA",0.009268590139394059,upper
+WA",0.00924476288466253,upper
 "Shark
 Bay","Offshore
-WA",0.05881831433175271,upper
+WA",0.0583684992146751,upper
 "Shark
 Bay","Gulf of
-Carpentaria",0.09662248621736501,upper
+Carpentaria",0.09464552726956624,upper
 "Shark
 Bay","New
-Caledonia",0.22861945799174038,upper
+Caledonia",0.22860079512515918,upper
 "Coastal
 WA","Shark
-Bay",0.0015781153028499757,lower
+Bay",0.0015532583408961898,lower
 "Coastal
 WA","Coastal
 WA",NA,diagonal
 "Coastal
 WA","Offshore
-WA",0.038815600290969934,upper
+WA",0.03856768698815291,upper
 "Coastal
 WA","Gulf of
-Carpentaria",0.08749342554567328,upper
+Carpentaria",0.08761199189003592,upper
 "Coastal
 WA","New
-Caledonia",0.1867760449805331,upper
+Caledonia",0.18673839549569668,upper
 "Offshore
 WA","Shark
-Bay",0.00335557203646949,lower
+Bay",0.0032956346951529894,lower
 "Offshore
 WA","Coastal
-WA",0.0017269768278433035,lower
+WA",0.0016930185940205041,lower
 "Offshore
 WA","Offshore
 WA",NA,diagonal
 "Offshore
 WA","Gulf of
-Carpentaria",0.10494590779939673,upper
+Carpentaria",0.10480684247872459,upper
 "Offshore
 WA","New
-Caledonia",0.20143593796615852,upper
+Caledonia",0.20080663023857998,upper
 "Gulf of
 Carpentaria","Shark
-Bay",0.0064569665001663135,lower
+Bay",0.006320758645956844,lower
 "Gulf of
 Carpentaria","Coastal
-WA",0.00500339419794678,lower
+WA",0.004884456756191695,lower
 "Gulf of
 Carpentaria","Offshore
-WA",0.005523399193183568,lower
+WA",0.0053985912880084586,lower
 "Gulf of
 Carpentaria","Gulf of
 Carpentaria",NA,diagonal
 "Gulf of
 Carpentaria","New
-Caledonia",0.14100895690510887,upper
+Caledonia",0.13703218010260082,upper
 "New
 Caledonia","Shark
-Bay",0.010515366361000814,lower
+Bay",0.01036413350591239,lower
 "New
 Caledonia","Coastal
-WA",0.009149381862251943,lower
+WA",0.009018856850601664,lower
 "New
 Caledonia","Offshore
-WA",0.009550010619036195,lower
+WA",0.00940286312874093,lower
 "New
 Caledonia","Gulf of
-Carpentaria",0.007286702751235247,lower
+Carpentaria",0.007119514096000405,lower
 "New
 Caledonia","New
 Caledonia",NA,diagonal
