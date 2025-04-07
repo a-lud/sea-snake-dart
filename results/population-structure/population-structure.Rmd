@@ -368,9 +368,10 @@ structure_df <- fs::dir_ls(
     )
 
 # Custom ordering of colour palette
-pal <- c(
-    "#ff595e", "#ffca3a", "#8ac926", "#1982c4"
-)
+# pal <- c(
+#     "#ff595e", "#ffca3a", "#8ac926", "#1982c4"
+# )
+pal <- c("#1982c4", "#1982c480", "#1982c440", "#1982c410")
 names(pal) <- 1:4
 ```
 
@@ -450,15 +451,15 @@ invisible(dev.off())
 plot_models
 ```
 
-From the figures above, it looks like `K = 3` is the best model fit in *Aipysurus*
-*laevis* and *Hydrophis major*, while `K = 4` appears the be the best fit for
-*Hydrophis stokesii*.
+From the figures above, it looks like `K = 4` is the best model fit in *Aipysurus*
+*laevis* and *Hydrophis stokesii*, while `K = 3` appears the be the best fit for
+*Hydrophis major*.
 
 ### *Aipysurus laevis*
 
 ```{r}
 pop_groups <- structure_df |>
-    filter(species == "ALA", K == "K3") |> 
+    filter(species == "ALA", K == "K4") |> 
     select(sample, population, species) |>
     distinct() |>
     mutate(size = 1) |>
@@ -479,7 +480,7 @@ pop_groups <- structure_df |>
     )
 
 plot_structure_ALA <- structure_df |>
-    filter(species == "ALA", K =="K3") |>
+    filter(species == "ALA", K =="K4") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
