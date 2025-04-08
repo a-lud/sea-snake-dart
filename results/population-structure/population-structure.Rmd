@@ -257,7 +257,12 @@ pal_PCA <- c(
     "#DCB0F2FF","#F89C74FF", "#F6CF71FF", "#66C5CCFF","#FE88B1FF", "#87C55FFF",
     "#B497E7FF", "#B3B3B3FF", "#C9DB74FF", "#9EB9F3FF", "#D3B484FF", "#8BE0A4FF"
 )
-names(pal_PCA) <- pop_levels
+names(pal_PCA) <- c(
+    "Shark Bay", "Exmouth Gulf", "Pilbara", 
+    "Broome", "Scott Reef", "Ashmore",
+    "Heywood Shoal", "North Kimberley", "Gulf of Carpentaria", 
+    "North QLD", "South QLD", "New Caledonia"
+)
 ```
 
 ### All samples
@@ -419,8 +424,8 @@ prb <- etable |>
     geom_line() +
     scale_y_continuous(
         name = "Estimated mean log-probability",
-        breaks = seq(0, -105000, -10000),
-        limits = c(-105e3, -2e4),
+        limits = c(-40000, 0),
+        breaks = seq(0, -40000, -5000),
         labels = scales::label_number(style_negative = "minus")
     ) +
     scale_x_continuous(breaks = seq(2, 9, 1))
@@ -452,8 +457,8 @@ plot_models
 ```
 
 From the figures above, it looks like `K = 4` is the best model fit in *Aipysurus*
-*laevis* and *Hydrophis stokesii*, while `K = 3` appears the be the best fit for
-*Hydrophis major*.
+*laevis* and *Hydrophis major*, while `K = 3` appears the be the best fit for
+*Hydrophis stokesii*.
 
 ### *Aipysurus laevis*
 
@@ -534,7 +539,7 @@ plot_structure_ALA
 
 ```{r}
 pop_groups <- structure_df |>
-    filter(species == "HMA", K == "K3") |> 
+    filter(species == "HMA", K == "K4") |> 
     select(sample, population, species) |>
     distinct() |>
     mutate(size = 1) |>
@@ -555,7 +560,7 @@ pop_groups <- structure_df |>
     )
 
 plot_structure_HMA <- structure_df |>
-    filter(species == "HMA", K == "K3") |>
+    filter(species == "HMA", K == "K4") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
@@ -609,7 +614,7 @@ plot_structure_HMA
 
 ```{r}
 pop_groups <- structure_df |>
-    filter(species == "HST", K == "K4") |> 
+    filter(species == "HST", K == "K3") |> 
     select(sample, population, species) |>
     distinct() |>
     mutate(size = 1) |>
@@ -630,7 +635,7 @@ pop_groups <- structure_df |>
     )
 
 plot_structure_HST <- structure_df |>
-    filter(species == "HST", K == "K4") |>
+    filter(species == "HST", K == "K3") |>
     ggplot(aes(x = sample, y = proportion, fill = partition)) +
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
