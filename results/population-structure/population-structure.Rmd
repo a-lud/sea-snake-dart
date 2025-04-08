@@ -485,7 +485,7 @@ plot_structure_ALA <- structure_df |>
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
     scale_y_continuous(
-        limits = c(0, 1),
+        limits = c(0, 1.001),
         breaks = c(0, 0.5, 1),
         labels = as.character(seq(0, 1, 0.5)),
         expand = c(0, 0)
@@ -560,6 +560,7 @@ plot_structure_HMA <- structure_df |>
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
     scale_y_continuous(
+        limits = c(0, 1.001),
         breaks = c(0, 0.5, 1),
         labels = as.character(seq(0, 1, 0.5)),
         expand = c(0, 0)
@@ -634,6 +635,7 @@ plot_structure_HST <- structure_df |>
     geom_col(position = "stack") +
     scale_fill_manual(values = pal) +
     scale_y_continuous(
+        limits = c(0, 1.001),
         breaks = c(0, 0.5, 1),
         labels = as.character(seq(0, 1, 0.5)),
         expand = c(0, 0)
