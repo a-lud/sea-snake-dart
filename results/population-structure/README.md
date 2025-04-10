@@ -1,22 +1,26 @@
 Population structure
 ================
-2025-04-08
+2025-04-10
 
 - [Helper functions](#helper-functions)
 - [Removed samples](#removed-samples)
-  - [PCA](#pca)
-    - [All samples](#all-samples)
-    - [WA Coast](#wa-coast)
-  - [STRUCTURE](#structure)
-    - [Choosing the correct K (N-ancestral
-      populations)](#choosing-the-correct-k-n-ancestral-populations)
-    - [*Aipysurus laevis*](#aipysurus-laevis)
-    - [*Hydrophis major*](#hydrophis-major)
-    - [*Hydrophis stokesii*](#hydrophis-stokesii)
-  - [STRUCTURE: WA coast samples](#structure-wa-coast-samples)
-    - [*Aipysurus laevis*](#aipysurus-laevis-1)
-    - [*Hydrophis major*](#hydrophis-major-1)
-    - [*Hydrophis stokesii*](#hydrophis-stokesii-1)
+- [PCA](#pca)
+  - [All samples](#all-samples)
+  - [WA Coast](#wa-coast)
+- [STRUCTURE](#structure)
+  - [Choosing the correct K (N-ancestral
+    populations)](#choosing-the-correct-k-n-ancestral-populations)
+  - [*Aipysurus laevis*](#aipysurus-laevis)
+  - [*Hydrophis major*](#hydrophis-major)
+  - [*Hydrophis stokesii*](#hydrophis-stokesii)
+- [Batch effects: fine-scale population
+  structure](#batch-effects-fine-scale-population-structure)
+- [STRUCTURE: WA coast samples](#structure-wa-coast-samples)
+  - [Choosing the correct K (N-ancestral
+    populations)](#choosing-the-correct-k-n-ancestral-populations-1)
+  - [*Aipysurus laevis*](#aipysurus-laevis-1)
+  - [*Hydrophis major*](#hydrophis-major-1)
+  - [*Hydrophis stokesii*](#hydrophis-stokesii-1)
 - [Isolation by Distance (IBD)](#isolation-by-distance-ibd)
   - [Mantel statistics and spatial
     auto-correlation](#mantel-statistics-and-spatial-auto-correlation)
@@ -47,7 +51,6 @@ plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, 
     sp_var <- variance_dataframe |>
         filter(species == spec, WA == WA_only)
     
-    # TODO: Figure out why this is being a piece of shit
     if(WA_only){
         wa_levels <- pca_dataframe |> 
             filter(WA == TRUE) |> 
@@ -141,7 +144,7 @@ plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, 
 }
 ```
 
-# Removed samples
+## Removed samples
 
 A range of samples were excluded from the PCAs below. Further numerous
 populations were ignored when running `STRUCTURE`. These can be found in
@@ -168,6 +171,7 @@ pop_levels <- c(
 # PCA dataframes
 df_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
     (\(x) x[!str_detect(x, "variance")])() |>
+    (\(x) x[!str_detect(x, "batch")])() |>
     imap(\(x, i) {
         fname <- str_remove(basename(i), ".csv")
         spec <- str_remove(fname, "-.*")
@@ -380,7 +384,7 @@ etable |>
     as_raw_html()
 ```
 
-<div id="eeinlcmthx" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="vzwoinkxtp" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -771,11 +775,150 @@ plot_structure_HST
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
 
+## Batch effects: fine-scale population structure
+
+When exploring fine-scale population structure, it’s important to be
+mindful that we’re likely trying to identify very faint signals of
+diversity. Consequently, if there is any other technical artefact that
+introduces a singal of diversity, it will likely swamp any real biology.
+
+Here, we run PCAs for all three species using the broad-scale population
+filters (SNPs in 50% of sub-population individuals and 75% of all
+samples) for WA coast samples. We then apply stringent filtering of 90%
+for *A. laevis* and *H. major*, and 95% for *H. stokesii* and see what
+the impact is (these values were identified by trial-and-error).
+
+``` r
+# Run information
+run_info <- fs::dir_ls(
+    here("data", "sample-sheets"),
+    glob = "*.csv"
+) |>
+    map(read_csv, col_types = cols()) |>
+    map(rename_with, str_to_title) |>
+    bind_rows() |>
+    mutate(
+        year = sub("DNote(.*)-.+", "\\1", Order),
+        year = as.integer(year),
+        `Sequencing date` = ifelse(year < 23, "Before 2023", "After 2023"),
+        `Sequencing date` = factor(`Sequencing date`, levels = c("Before 2023", "After 2023"))
+    ) |>
+    select(sample = Id_clean, order = Order, `Sequencing date`)
+
+# Add runinfo to clean WA PCA
+df_pca_wa <- df_pca |>
+    left_join(run_info) |>
+    filter(WA == TRUE) |>
+    mutate(dataset = "Stringent filter")
+
+# PCA WA populations using broad-scale filters
+df_pca_batch <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*batch_effects.csv") |>
+    (\(x) x[!str_detect(x, "variance")])() |>
+    imap(\(x, i) {
+        fname <- str_remove(basename(i), ".csv")
+        spec <- str_remove(fname, "-.*")
+        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
+        
+        tmp <- x |>
+            read_csv(col_names = TRUE, col_types = cols())
+        colnames(tmp) <- c("sample", paste0("PC", 1:(ncol(tmp) - 1)))
+        pops |>
+            filter(species == spec) |>
+            inner_join(tmp) |>
+            mutate(WA = wa, .after = species)
+    }) |>
+    list_rbind() |>
+    select(species, WA, sample, population, PC1, PC2, PC3) |>
+    mutate(
+        population = str_replace_all(population, "_", " "),
+        population = factor(population, levels = pop_levels),
+        dataset = "Relaxed filter"
+    ) |>
+    left_join(run_info)
+
+# Variance dataframes
+df_variance_batch <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*variance-batch_effects.csv") |>
+    imap(\(x, i) {
+        fname <- str_remove(basename(i), ".csv")
+        spec <- str_remove(fname, "-.*")
+        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
+        x |>
+            read_csv(
+                skip = 1,
+                col_names = c("pc_axes", "variance"),
+                col_types = cols()
+            ) |>
+            mutate(
+                species = spec,
+                WA = wa,
+                pc_axes = pc_axes + 1,
+                pc_axes = paste0("PC", pc_axes)
+            ) |>
+            filter(pc_axes %in% c("PC1", "PC2", "PC3"))
+    }) |>
+    list_rbind()
+```
+
+What we can see is that using broad-scale filtering isn’t adequate at
+the WA population level. The data clearly separates by sequencing date -
+before or after 2023. DaRT changed how they provided data after 2023, so
+it’s not unrealistic to assume that their protocols may have changed at
+the bench as well.
+
+Applying a more stringent filter helps reduce the effect sequencing date
+has on data grouping, though it’s evident that it still has some impact.
+However, we can see that separation in *A. laevis* and *H. stokesii* no
+longer persists once we apply more stringent filters, while it does in
+*H. major*. At this point, a tigher filter is the best we can do.
+
+``` r
+plot_batch_effects <- bind_rows(df_pca_wa, df_pca_batch) |>
+    mutate(
+        spec = case_when(
+            species == "ALA" ~ "Aipysurus laevis",
+            species == "HMA" ~ "Hydrophis major",
+            species == "HST" ~ "Hydrophis stokesii"
+        )
+    ) |>
+    ggplot(aes(x = PC1, y = PC2, colour = `Sequencing date`)) +
+    geom_point(size = 3) +
+    scale_colour_manual(values = c("#FF8811FF", "#046E8FFF")) +
+    ggh4x::facet_grid2(rows = vars(dataset), cols = vars(spec), axes = "all") +
+    guides(
+        colour = guide_legend(title.position = "top")
+    ) +
+    theme_classic() +
+    theme(
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 14, face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 14),
+        strip.text.x = element_text(face = "italic"),
+        legend.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size = 14),
+        legend.position = "bottom"
+    )
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "pca-batch_effects-WA.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+plot_batch_effects
+invisible(dev.off())
+
+plot_batch_effects
+```
+
+<img src="population-structure_files/figure-gfm/batch-effects-1.png" width="100%" />
+
 ## STRUCTURE: WA coast samples
 
 ``` r
 structure_df_wa <- fs::dir_ls(
-    here("results", "population-structure", "structure"), 
+    here("results", "population-structure", "structure-wa"), 
     glob = "*plot.csv", 
     recurse = TRUE
 ) |>
@@ -799,7 +942,49 @@ structure_df_wa <- fs::dir_ls(
     ) |>
     arrange(species, longitude) |>
     mutate(sample = forcats::fct_inorder(sample))
+
+etable_wa <- fs::dir_ls(
+    here("results", "population-structure", "structure-wa"), 
+    glob = "*etable.csv",
+    recurse = TRUE
+) |>
+    read_csv(col_names = TRUE, col_types = cols(), id = "species") |>
+    mutate(species = str_remove(basename(species), "-.*")) |>
+    rename(K = `...1`)
 ```
+
+### Choosing the correct K (N-ancestral populations)
+
+``` r
+prb_wa <- etable_wa |>
+    ggplot(aes(x = K, y = estLnProbMean, colour = species)) +
+    geom_point() +
+    geom_line() +
+    scale_y_continuous(
+        name = "Estimated mean log-probability",
+        # limits = c(-40000, 0),
+        # breaks = seq(0, -40000, -5000),
+        labels = scales::label_number(style_negative = "minus")
+    ) +
+    scale_x_continuous(breaks = seq(2, 9, 1))
+
+dk_wa <- etable_wa |>
+    ggplot(aes(x = K, y = deltaK, colour = species)) +
+    geom_point() +
+    geom_line() +
+    scale_x_continuous(breaks = seq(2, 9, 1)) +
+    scale_y_continuous(
+        name = "Delta-K",
+        breaks = seq(0, 15, 1)
+    )
+
+plot_models_wa <- prb_wa/dk_wa +
+    plot_layout(axes = "collect", guides = "collect")
+
+plot_models_wa
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
 
 ### *Aipysurus laevis*
 
@@ -879,7 +1064,7 @@ invisible(dev.off())
 plot_structure_ALA_wa
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-9-1.png" width="100%" />
 
 ### *Hydrophis major*
 
@@ -959,7 +1144,7 @@ invisible(dev.off())
 plot_structure_HMA_wa
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-9-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-10-1.png" width="100%" />
 
 ### *Hydrophis stokesii*
 
@@ -1039,7 +1224,7 @@ invisible(dev.off())
 plot_structure_HST_wa
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-10-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-11-1.png" width="100%" />
 
 # Isolation by Distance (IBD)
 
@@ -1470,7 +1655,7 @@ invisible(dev.off())
 plot_scatter
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-12-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-13-1.png" width="100%" />
 
 ### Spatial auto-correlation
 
@@ -1551,4 +1736,4 @@ invisible(dev.off())
 plot_correlog
 ```
 
-<img src="population-structure_files/figure-gfm/unnamed-chunk-13-1.png" width="100%" />
+<img src="population-structure_files/figure-gfm/unnamed-chunk-14-1.png" width="100%" />
