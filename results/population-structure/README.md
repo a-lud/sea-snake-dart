@@ -1,6 +1,6 @@
 Population structure
 ================
-2025-04-10
+2025-04-12
 
 - [Helper functions](#helper-functions)
 - [Removed samples](#removed-samples)
@@ -28,6 +28,7 @@ Population structure
     - [Geographic distance vs Genetic
       distance](#geographic-distance-vs-genetic-distance)
     - [Spatial auto-correlation](#spatial-auto-correlation)
+    - [Without Shark Bay samples](#without-shark-bay-samples)
 
 This directory contains population structure results. The script
 `population-structure.Rmd` renders this `README` and is responsible for
@@ -523,7 +524,7 @@ etable |>
     as_raw_html()
 ```
 
-<div id="kxcsmudjhf" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="gsoijvmvfr" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -1233,7 +1234,9 @@ the VCF data and estimate the genetic distance matrix (Nei’s genetic
 distance).
 
 Note: I also found this repo helpful -
-<https://github.com/jdalapicolla/IBD_models.R>
+<https://github.com/jdalapicolla/IBD_models.R> In addition to this
+repository -
+<https://anon0433.github.io/strong-individual-signatures/mantel_tests_and_spatial_autocorrelation#figure_4:_mantel-based_correlogram>
 
 ``` r
 # Load the snpR library and the custom scripts (found in the scripts directory)
@@ -1457,6 +1460,8 @@ mantel_results <- vcfs |>
         lcDist <- lcDist[rownames(genMat), colnames(genMat)]
         
         # Grouping data into 200km bins - increases amount of data for correlation
+        geo_vect <- lcDist[lower.tri(lcDist)]
+        geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 200))
         classes <- seq(0, round( (max(lcDist, na.rm = TRUE) + 50), digits = -2 ), 200)
         
         # Example of running the Mantel statistic using vegan
@@ -1486,7 +1491,8 @@ mantel_results <- vcfs |>
             "mantel" = output.mantel.summary,
             "correlog" = output.mantel.correlog,
             "genetic_dist" = genMat,
-            "geo_dist" = lcDist
+            "geo_dist" = lcDist,
+            "geo_classes" = geo_classes
         )
     })
 ```
@@ -1737,3 +1743,445 @@ plot_correlog
 ```
 
 <img src="population-structure_files/figure-gfm/unnamed-chunk-14-1.png" width="100%" />
+
+### Without Shark Bay samples
+
+``` r
+meta_latLong_no_SB <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
+    purrr::map(\(x) {
+        x |>
+            read_csv(col_types = cols()) |>
+            select(species, id, targetid, pop, latitude, longitude) |>
+            unite(col = "sampID", sep = "-", species, id, targetid) |>
+            filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove, pop != "Shark_Bay") |>
+            select(sampID, pop, x = longitude, y = latitude) |>
+            # For snakes with identical long/lat + population, choose one at random
+            slice_sample(n = 1, by = c(pop, x, y))
+    })
+
+# Load the VCF files as snpR data objects
+vcfs_no_SB <- fs::dir_ls(
+    here("results", "ipyrad"),
+    glob = "*stringent.vcf.gz",
+    recurse = TRUE
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    imap(\(v,i) {
+        filter_val <- case_when(
+            i == "ALA" ~ 0.9, 
+            i == "HMA" ~ 0.9, 
+            i == "HST" ~ 0.95
+        )
+        tmp_vcf <- read_vcf(file = v)
+        
+        filt_vcf <- filter_snps(
+            tmp_vcf,
+            min_ind = filter_val,
+            re_run = "full"
+        )
+        
+        # Subset for samples to keep + add in metadata
+        filt_vcf <- subset_snpR_data(
+            x = filt_vcf, 
+            .facets = "sampID",
+            .subfacets = meta_latLong_no_SB[[i]]$sampID
+        )
+        
+        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong_no_SB[[i]])
+        
+        filt_vcf <- custom_calc_genetic_distances(
+            filt_vcf, 
+            facets = c("sampID", "pop"), 
+            method = "Nei"
+        )
+        filt_vcf
+    })
+```
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 133969
+    ##   column count: 214
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 133969
+    ##   Character matrix gt cols: 214
+    ##   skip: 0
+    ##   nrows: 133969
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant 53000Processed variant 54000Processed variant 55000Processed variant 56000Processed variant 57000Processed variant 58000Processed variant 59000Processed variant 60000Processed variant 61000Processed variant 62000Processed variant 63000Processed variant 64000Processed variant 65000Processed variant 66000Processed variant 67000Processed variant 68000Processed variant 69000Processed variant 70000Processed variant 71000Processed variant 72000Processed variant 73000Processed variant 74000Processed variant 75000Processed variant 76000Processed variant 77000Processed variant 78000Processed variant 79000Processed variant 80000Processed variant 81000Processed variant 82000Processed variant 83000Processed variant 84000Processed variant 85000Processed variant 86000Processed variant 87000Processed variant 88000Processed variant 89000Processed variant 90000Processed variant 91000Processed variant 92000Processed variant 93000Processed variant 94000Processed variant 95000Processed variant 96000Processed variant 97000Processed variant 98000Processed variant 99000Processed variant 100000Processed variant 101000Processed variant 102000Processed variant 103000Processed variant 104000Processed variant 105000Processed variant 106000Processed variant 107000Processed variant 108000Processed variant 109000Processed variant 110000Processed variant 111000Processed variant 112000Processed variant 113000Processed variant 114000Processed variant 115000Processed variant 116000Processed variant 117000Processed variant 118000Processed variant 119000Processed variant 120000Processed variant 121000Processed variant 122000Processed variant 123000Processed variant 124000Processed variant 125000Processed variant 126000Processed variant 127000Processed variant 128000Processed variant 129000Processed variant 130000Processed variant 131000Processed variant 132000Processed variant 133000Processed variant: 133969
+    ## All variants processed
+
+    ## Initializing...
+    ## Filtering loci. Starting loci: 130955 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  107701 bad loci
+
+    ##  Ending loci: 23254 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  0 bad loci
+    ##  Final loci count: 23254
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 52666
+    ##   column count: 101
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 52666
+    ##   Character matrix gt cols: 101
+    ##   skip: 0
+    ##   nrows: 52666
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant: 52666
+    ## All variants processed
+
+    ## Initializing...
+    ## Filtering loci. Starting loci: 51961 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  44925 bad loci
+
+    ##  Ending loci: 7036 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  0 bad loci
+    ##  Final loci count: 7036
+
+    ## Scanning file to determine attributes.
+    ## File attributes:
+    ##   meta lines: 10
+    ##   header_line: 11
+    ##   variant count: 90080
+    ##   column count: 123
+    ## Meta line 10 read in.
+    ## All meta lines processed.
+    ## gt matrix initialized.
+    ## Character matrix gt created.
+    ##   Character matrix gt rows: 90080
+    ##   Character matrix gt cols: 123
+    ##   skip: 0
+    ##   nrows: 90080
+    ##   row_num: 0
+    ## Processed variant 1000Processed variant 2000Processed variant 3000Processed variant 4000Processed variant 5000Processed variant 6000Processed variant 7000Processed variant 8000Processed variant 9000Processed variant 10000Processed variant 11000Processed variant 12000Processed variant 13000Processed variant 14000Processed variant 15000Processed variant 16000Processed variant 17000Processed variant 18000Processed variant 19000Processed variant 20000Processed variant 21000Processed variant 22000Processed variant 23000Processed variant 24000Processed variant 25000Processed variant 26000Processed variant 27000Processed variant 28000Processed variant 29000Processed variant 30000Processed variant 31000Processed variant 32000Processed variant 33000Processed variant 34000Processed variant 35000Processed variant 36000Processed variant 37000Processed variant 38000Processed variant 39000Processed variant 40000Processed variant 41000Processed variant 42000Processed variant 43000Processed variant 44000Processed variant 45000Processed variant 46000Processed variant 47000Processed variant 48000Processed variant 49000Processed variant 50000Processed variant 51000Processed variant 52000Processed variant 53000Processed variant 54000Processed variant 55000Processed variant 56000Processed variant 57000Processed variant 58000Processed variant 59000Processed variant 60000Processed variant 61000Processed variant 62000Processed variant 63000Processed variant 64000Processed variant 65000Processed variant 66000Processed variant 67000Processed variant 68000Processed variant 69000Processed variant 70000Processed variant 71000Processed variant 72000Processed variant 73000Processed variant 74000Processed variant 75000Processed variant 76000Processed variant 77000Processed variant 78000Processed variant 79000Processed variant 80000Processed variant 81000Processed variant 82000Processed variant 83000Processed variant 84000Processed variant 85000Processed variant 86000Processed variant 87000Processed variant 88000Processed variant 89000Processed variant 90000Processed variant: 90080
+    ## All variants processed
+
+    ## Initializing...
+    ## Filtering loci. Starting loci: 88607 
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  80988 bad loci
+
+    ##  Ending loci: 7619 
+    ## Re-filtering loci...
+    ## Filtering non-biallelic loci...
+    ##  0 bad loci
+    ## Filtering non_polymorphic loci...
+    ##  0 bad loci
+    ## Filtering loci sequenced in few individuals...
+    ##  0 bad loci
+    ##  Final loci count: 7619
+
+``` r
+mantel_results_no_SB <- vcfs_no_SB |>
+    imap(\(x, i) {
+        genMat <- get.snpR.stats(x, facets = "sampID", stats = "genetic_distance")
+        genMat <-as.matrix(genMat$sampID$.base$Nei)
+        
+        lat_long <- meta_latLong_no_SB[[i]] |>
+            select(3, 4)
+        
+        if(i == "ALA") {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9,
+                resolution = 3, 
+                keep = TRUE
+            )
+        } else if(i == "HMA") {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9, 
+                resolution = 3, keep = TRUE
+            )
+        } else {
+            WAcoast <- getNOAA.bathy(
+                lon1 = 111.7, lon2 = 127.2,
+                lat1 = -26.8, lat2 = -9.9, 
+                resolution = 3, 
+                keep = TRUE
+            )
+        }
+        
+        transMat <- trans.mat(WAcoast) 
+        lcDist <- lc.dist(transMat, lat_long, res = "dist")
+        lcDist <- as.matrix(lcDist)
+        
+        rownames(lcDist) <- meta_latLong_no_SB[[i]]$sampID
+        colnames(lcDist) <- meta_latLong_no_SB[[i]]$sampID
+        
+        # Arrange geographic distance matrix by genetic distance matrix
+        lcDist <- lcDist[rownames(genMat), colnames(genMat)]
+        
+        # Grouping data into 200km bins - increases amount of data for correlation
+        geo_vect <- lcDist[lower.tri(lcDist)]
+        geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 200))
+        classes <- seq(0, round( (max(lcDist, na.rm = TRUE) + 50), digits = -2 ), 200)
+        
+        # Example of running the Mantel statistic using vegan
+        output.mantel <- vegan::mantel(
+            as.dist(genMat),
+            as.dist(lcDist),
+            permutations = 10000
+        )
+        
+        output.mantel.summary <- tibble(
+            "Observed correlation" = output.mantel$statistic,
+            "Significance" = output.mantel$signif,
+            "Replicates" = output.mantel$permutations
+        )
+        
+        # Correlog analysis - binned data
+        output.mantel.correlog <- vegan::mantel.correlog(
+            D.eco = as.dist(genMat),
+            D.geo = as.dist(lcDist),
+            break.pts = classes,
+            nperm = 10000,
+            progressive = TRUE,
+            cutoff = FALSE
+        )
+        
+        list(
+            "mantel" = output.mantel.summary,
+            "correlog" = output.mantel.correlog,
+            "genetic_dist" = genMat,
+            "geo_dist" = lcDist,
+            "geo_classes" = geo_classes
+        )
+    })
+
+mantel_results_no_SB |>
+    purrr::map(\(x) {
+        x$mantel
+    }) |>
+    bind_rows(.id = "Species") |>
+    gt() |>
+    fmt_number(
+        columns = c("Observed correlation", "Significance"),
+        decimals = 4
+    ) |>
+    fmt_number(
+        columns = "Replicates", use_seps = TRUE, drop_trailing_zeros = TRUE
+    ) |>
+    as_raw_html()
+```
+
+<div id="lsanvrlmxq" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+  &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
+  <thead style="border-style: none;">
+    <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="Species" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: left;" bgcolor="#FFFFFF" valign="bottom" align="left">Species</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Observed-correlation" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Observed correlation</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Significance" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Significance</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="Replicates" style="border-style: none; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: normal; text-transform: inherit; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: bottom; padding-top: 5px; padding-bottom: 6px; padding-left: 5px; padding-right: 5px; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" bgcolor="#FFFFFF" valign="bottom" align="right">Replicates</th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3;">
+    <tr style="border-style: none;"><td headers="Species" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">ALA</td>
+<td headers="Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0386</td>
+<td headers="Significance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.1378</td>
+<td headers="Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">10,000</td></tr>
+    <tr style="border-style: none;"><td headers="Species" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA</td>
+<td headers="Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">−0.0019</td>
+<td headers="Significance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.4610</td>
+<td headers="Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">10,000</td></tr>
+    <tr style="border-style: none;"><td headers="Species" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST</td>
+<td headers="Observed correlation" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.1314</td>
+<td headers="Significance" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0350</td>
+<td headers="Replicates" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">10,000</td></tr>
+  </tbody>
+  &#10;  
+</table>
+</div>
+
+``` r
+df_gen_geo_no_SB <- mantel_results_no_SB |>
+    imap(\(x, i) {
+        genDist <- x[["genetic_dist"]]
+        geoDist <- x[["geo_dist"]]
+        
+        # Reformat genetic distance matrix
+        genDist[upper.tri(genDist, diag = T)] = NA
+        genDist <- genDist |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2","GenDist")) |>
+            as_tibble()
+        
+        # Reformat geographic distance matrix
+        geoDist[upper.tri(geoDist, diag = T)] = NA
+        geoDist <- geoDist |>
+            reshape2::melt() |>
+            na.omit() |>
+            arrange(Var1) |>
+            setNames(c("X1", "X2","GeoDist")) |>
+            as_tibble()
+        
+        left_join(genDist, geoDist) |>
+            na.omit()
+    }) |>
+    bind_rows(.id = "species") |>
+    mutate(species = case_when(
+        species == "ALA" ~ "Aipysurus laevis",
+        species == "HMA" ~ "Hydrophis major",
+        species == "HST" ~ "Hydrophis stokesii"
+    ))
+
+# Plot distance (kilometres) vs genetic distance (Nei)
+plot_scatter_no_SB <- df_gen_geo_no_SB |>
+    mutate(species = factor(species, levels = c("Aipysurus laevis", "Hydrophis major", "Hydrophis stokesii"))) |>
+    ggplot(aes(x = GeoDist, y = GenDist, colour = species)) +
+    geom_point(alpha = 0.4) +
+    geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
+    scale_x_continuous(
+        name = "Distance (Km)",
+        breaks = seq(0, 1600, 200),
+        labels = as.character(seq(0, 1600, 200)),
+        expand = c(0.01, 0, 0.02, 0)
+    ) +
+    scale_y_continuous(
+        name = "Genetic distance (Nei)",
+        breaks = seq(0, 0.055, 0.005),
+        labels = as.character(seq(0, 0.055, 0.005)),
+        limits = c(0, 0.055),
+        expand = c(0.02, 0)
+    ) +
+    scale_colour_brewer(palette = "Set1") +
+    guides(colour = guide_legend(override.aes = list(size = 6))) +
+    theme(
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.position = "top",
+        legend.text = element_text(size = 14, face = "italic"),
+        legend.title = element_blank()
+    )
+
+cairo_pdf(
+    here("results", "population-structure", "mantel-scatter-no-shark_bay.pdf"),
+    width = 12, height = 12
+)
+plot_scatter_no_SB
+invisible(dev.off())
+
+plot_scatter_no_SB
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-17-1.png" width="100%" />
+
+``` r
+plots_no_SB <- mantel_results_no_SB |>
+    purrr::imap(\(x, i) {
+        spc <- case_when(
+            i == "ALA" ~ "Aipysurus laevis",
+            i == "HMA" ~ "Hydrophis major",
+            i == "HST" ~ "Hydrophis stokesii"
+        )
+        tmp <- x$correlog$mantel.res |>
+            as_tibble()
+        
+        tmp |>
+            mutate(
+                classification = case_when(
+                    `Mantel.cor` < 0 & `Pr(corrected)` < 0.05 ~ "Lower",
+                    `Mantel.cor` > 0 & `Pr(corrected)` < 0.05 ~ "Higher",
+                    .default = "Neutral"
+                ),
+                classification = factor(classification, levels = c("Higher", "Neutral", "Lower"))
+            ) |>
+            ggplot(aes(x = class.index, y = Mantel.cor)) +
+            geom_hline(yintercept = 0, colour = "red") +
+            geom_line(colour = "black") +
+            geom_point(
+                mapping = aes(fill = classification), 
+                shape = 22, 
+                size = 4, 
+                show.legend = TRUE, 
+                colour = "black"
+            ) +
+            labs(
+                x = "Least-cost distance (KM)",
+                y = "Mantel correlation",
+                fill = NULL,
+                title = spc
+            ) +
+            scale_fill_manual(values = c("#00BA38", "grey80", "#619CFF"), drop = FALSE) +
+            scale_y_continuous(
+                limits = c(-0.3, 0.2),
+                breaks = seq(-0.3, 0.2, 0.1),
+                labels = c("0.3", "-0.2", "-0.1", "0", "0.1", "0.2"),
+                expand = c(0.01, 0)
+            ) +
+            scale_x_continuous(
+                limits = c(0, (max(tmp$class.index) + 100) ),
+                breaks = seq(0, ( max(tmp$class.index) + 100), 200 ),
+                labels = seq(0, ( max(tmp$class.index) + 100), 200 ),
+                expand = c(0.01, 0)
+            ) +
+            guides(fill = guide_legend(override.aes = list(size = 6))) +
+            theme(
+                axis.text = element_text(size = 14),
+                axis.title = element_text(size = 16),
+                legend.text = element_text(size = 14),
+                plot.title = element_text(face = "italic", hjust = 0.5)
+            )
+    })
+
+design <- "12\n34"
+
+plot_correlog_no_SB <- plots_no_SB$ALA + plots_no_SB$HMA + plots_no_SB$HST + guide_area() +
+    plot_layout(
+        design = design,
+        guides = "collect",
+        axes = "collect"
+    )
+
+cairo_pdf(
+    here("results", "population-structure", "mantel-correlog-no-shark_bay.pdf"),
+    width = 12, height = 12
+)
+plot_correlog_no_SB
+invisible(dev.off())
+
+plot_correlog_no_SB
+```
+
+<img src="population-structure_files/figure-gfm/unnamed-chunk-18-1.png" width="100%" />
