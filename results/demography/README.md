@@ -1,7 +1,7 @@
 Effective population size
 ================
 Alastair Ludington
-2025-02-28
+2025-04-14
 
 - [Introduction](#introduction)
 - [Data processing](#data-processing)
@@ -40,7 +40,8 @@ years.
 ``` r
 # ---------------------------------------------------------------------------- #
 # Scaling parameters
-mu <- 2e-9
+# mu <- 2e-9
+mu <- 4.71e-9 # https://academic.oup.com/mbe/article/37/6/1744/5741420#204169216
 gen <- 10
 
 # ---------------------------------------------------------------------------- #
@@ -96,7 +97,7 @@ df_msmc |>
 # MSMC2 stairway plot
 plot_stairway <- df_msmc |>
     # Removal of an obviously aberrant signal in distant past
-    filter(Ne <= 3e6, clock == "2*2+25*1+2*3", Ne <= 1.5e6) |>
+    filter(clock == "2*2+25*1+2*3") |>
     ggplot(
         aes(
             x = Years, y = Ne,
@@ -106,19 +107,19 @@ plot_stairway <- df_msmc |>
     ) +
     geom_step(linewidth = 1.4) +
     scale_x_log10(
-        limits = c(3e4, 110e6),
+        limits = c(3e4, 100e6),
         labels = scales::label_number(scale = 1e-6, drop0trailing = TRUE)
     ) +
     annotation_logticks(sides = 'b', outside = TRUE, ) +
     coord_cartesian(clip = "off" ) +
     scale_y_continuous(
-        limits = c(0, 1.5e6),
-        breaks = seq(0, 1.5e6, 2.5e5),
-        labels = scales::label_number(scale = 1e-6),
+        limits = c(0, 600e3),
+        breaks = seq(0, 600e3, 1e5),
+        labels = scales::label_number(scale = 1e-3),
         expand = c(0, 0)
     ) +
     labs(
-        y = bquote("Effective population size "~(N[e]~x~10^6)),
+        y = bquote("Effective population size "~(N[e]~x~10^3)),
         x = bquote("Years ago (x10"^6*')')
     ) +
     scale_color_brewer(palette = "Set1") +
@@ -139,12 +140,6 @@ plot_stairway <- df_msmc |>
         panel.background = element_blank(),
         axis.line = element_line(colour = "black", linewidth = 0.7)
     )
-plot_stairway
-```
-
-<img src="demography_files/figure-gfm/msmc-data-1.png" width="100%" />
-
-``` r
 ragg::agg_png(
     filename = here("results", "demography", "msmc.png"),
     width = 1200, height = 1200,
@@ -157,4 +152,4 @@ invisible(dev.off())
 plot_stairway
 ```
 
-<img src="demography_files/figure-gfm/msmc-data-2.png" width="100%" />
+<img src="demography_files/figure-gfm/msmc-data-1.png" width="100%" />
