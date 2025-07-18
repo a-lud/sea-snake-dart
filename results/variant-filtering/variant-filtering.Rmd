@@ -1,0 +1,1106 @@
+---
+title: "VCF filtering"
+author: "Alastair Ludington"
+date: "`r Sys.Date()`"
+output: 
+    github_document:
+        toc: true
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE, message = FALSE, 
+    warning = FALSE, error = FALSE,
+    fig.height = 12, fig.width = 12, fig.dpi=300,
+    out.width = "100%"
+)
+
+suppressPackageStartupMessages({
+    library(paletteer)
+    library(tidyverse)
+    library(patchwork)
+    library(here)
+    library(gt)
+    library(SeqArray)
+    library(SNPRelate)
+})
+
+pop_levels <- c(
+    "Shark Bay" ,"Exmouth Gulf", "Pilbara", 
+    "Broome", "North Kimberley", "Scott Reef", "Ashmore", "Heywood Shoal",
+    "Gulf of Carpentaria", "North QLD", "South QLD", "New Caledonia"
+)
+
+pal_PCA <- c(
+    "#DCB0F2FF","#F89C74FF", "#F6CF71FF", "#66C5CCFF","#FE88B1FF", "#87C55FFF",
+    "#B497E7FF", "#B3B3B3FF", "#C9DB74FF", "#9EB9F3FF", "#D3B484FF", "#8BE0A4FF"
+)
+names(pal_PCA) <- c(
+    "Shark Bay", "Exmouth Gulf", "Pilbara", 
+    "Broome", "Scott Reef", "Ashmore",
+    "Heywood Shoal", "North Kimberley", "Gulf of Carpentaria", 
+    "North QLD", "South QLD", "New Caledonia"
+)
+
+# Set the populations
+wa_coast_pops <- c("Shark Bay", "Exmouth Gulf", "Pilbara", "Broome", "North Kimberley")
+
+# population file
+pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
+    read_delim(
+        delim = " ", 
+        col_names = c("sample", "population"), 
+        col_types = cols(), 
+        id = "species"
+    ) |>
+    mutate(
+        population = str_replace_all(population, "_", " "),
+        species = str_remove(basename(species), "-.*")
+    )
+
+# Populations to ignore
+ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
+    read_tsv(
+        col_names = "population",
+        col_types = cols()
+    ) |>
+    distinct() |>
+    pull() |>
+    str_replace_all("_", " ")
+
+# Problem samples to remove 
+samples_remove <- read_tsv(
+    here("data", "popmaps", "dropped-samples.tsv"), 
+    skip = 1, 
+    col_names = c("sample", "pop"),
+    col_types = cols()
+) |>
+    pull(sample)
+
+# Added additional H. major samples that were constantly skewing the data...
+samples_remove <- c(
+    samples_remove,
+    "HMA-VU46-2117754", "HMA-SS170818_01-2117748", "HMA-SS170814_02-2117746",
+    "HMA-SS170812_01-2117751", "HMA-WAM-R154980-2562264", "HST-KLS1688-4013428"
+)
+
+# Run information
+run_info <- fs::dir_ls(
+    here("data", "sample-sheets"),
+    glob = "*.csv"
+) |>
+    map(read_csv, col_types = cols()) |>
+    map(rename_with, str_to_title) |>
+    bind_rows() |>
+    mutate(
+        year = sub("DNote(.*)-.+", "\\1", Order),
+        year = as.integer(year),
+        `Sequencing date` = ifelse(year < 23, "Before 2023", "After 2023"),
+        `Sequencing date` = factor(`Sequencing date`, levels = c("Before 2023", "After 2023"))
+    ) |>
+    select(sample = Id_clean, order = Order, `Sequencing date`)
+```
+
+Below we'll use the `R` packages `SeqArray` and `SNPRelate` to filter our data.
+These are helpful tools that can make data visualisation and filtering easy all
+within a single environment.
+
+The goal here is to obtain a dataset filtered on MAF, linkage and poor samples.
+The output will be new VCF files that we can use to run `STRUCTURE`, perform
+diversity stats from and run isolation by distance (IBD) analyses from.
+
+The document from [MarineOmics][mo] was used as a guide for these analyses.
+
+If you'd like to see the code responsible for this document, open the `.Rmd` file
+in this directory.
+
+[mo]: https://marineomics.github.io/RADseq.html#Evaluate_potential_sources_of_error
+
+## Problem samples
+
+The following samples have been identified as significant outliers, not matching
+the rest of the samples in their population groups. These need to be manually
+investigated.
+
+```{r problem-samples}
+tibble(`Problem samples` = samples_remove) |>
+    mutate(
+        species = case_when(
+            str_starts(`Problem samples`, "A") ~ "Aipysurus laevis",
+            str_starts(`Problem samples`, "HM") ~ "Hydrophis major",
+            .default = "Hydrophis stokesii"
+        ),
+        .before = `Problem samples`
+    ) |>
+    gt(groupname_col = "species", row_group_as_column = TRUE) |>
+    tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_column_labels()
+    ) |>
+    as_raw_html()
+```
+
+## Convert VCF to GDS
+
+`SNPRelate` uses genomic data structures (`GDS`) objects. These are succinct data
+structures for representing variant data. Below we create a `GDS` object for each
+genus.
+
+```{r create-gds, echo=TRUE}
+files <- c(
+    here("results", "ipyrad", "ALA-stringent_outfiles/ALA-stringent.vcf.gz"),
+    here("results", "ipyrad", "HMA-stringent_outfiles/HMA-stringent.vcf.gz"),
+    here("results", "ipyrad", "HST-stringent_outfiles/HST-stringent.vcf.gz")
+)
+
+# Only needs to be run once
+walk(files, \(x){
+    bn <- str_remove(basename(x), "-.*")
+    fgds <- here("results", "variant-filtering")
+    fgds <- paste0(str_remove(x, "\\..*"), ".gds")
+    fgds_sa <- paste0(str_remove(x, "\\..*"), ".sa.gds")
+    
+    snpgdsVCF2GDS(vcf.fn = x, out.fn = fgds, verbose = FALSE) # intermediate - handles our VCF file
+    seqSNP2GDS(fgds, fgds_sa, storage.option = "LZMA_RA", verbose = FALSE)
+})
+
+gds_files <- fs::dir_ls(
+    here("results", "ipyrad"),
+    glob = "*.sa.gds",
+    recurse = TRUE
+) |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))()
+```
+
+## Pre-filtering
+
+Below is how each species looks in a PCA before filtering. We can see that there
+are some outlier samples, in addition to batch effects (especially in *Hydrophis*
+*stokesii*).
+
+```{r pre-filter-figures}
+pca_before_filtering <- gds_files |>
+    imap(\(x, species) {
+        gds <- seqOpen(x)
+        
+        # Drop problem sample
+        sample_ids <- seqGetData(gds, "sample.id")
+        keep <- sample_ids[! sample_ids %in% samples_remove]
+        
+        pca_all_out <- SNPRelate::snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            maf = NaN,
+            num.thread = 4,
+            sample.id = keep, 
+            verbose = FALSE
+        )
+        
+        pc_all <- as_tibble(pca_all_out$eigenvect) |>
+            mutate(sample = pca_all_out$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            left_join(run_info, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        # WA samples
+        wa_samples <- pops |>
+            filter(
+                species == species, 
+                population %in% c(
+                    "Shark Bay", "Exmouth Gulf", "Pilbara", 
+                    "Broome",  "North Kimberley"
+                )
+            ) |>
+            pull(sample)
+        keep <- keep[keep %in% wa_samples]
+        
+        pca_wa_out <- SNPRelate::snpgdsPCA(
+            gds,
+            autosome.only = F,
+            num.thread=4,
+            sample.id = keep,
+            verbose = FALSE
+        )
+        
+        pc_wa <- as_tibble(pca_wa_out$eigenvect) |>
+            mutate(sample = pca_wa_out$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            left_join(run_info, by = join_by(sample)) |>
+            mutate(condition = "WA")
+        
+        seqClose(gds)
+        
+        data <- bind_rows(pc_all, pc_wa)
+        
+        pca_pop <-  data |>
+            ggplot(aes(x = V1, y = V2, colour = population, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = pal_PCA, drop = FALSE) +
+            labs(
+                colour = "Population",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_wrap2(
+                vars(condition),
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text = element_text(size = 14, face = "bold"),
+                axis.title = element_text(size = 14),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        
+        pca_batch <- data |>
+            ggplot(aes(x = V1, y = V2, colour = `Sequencing date`, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = c("#453947FF", "#FED789FF"), drop = FALSE) +
+            labs(
+                colour = "Sequencing date",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_wrap2(
+                vars(condition),
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text = element_blank(),
+                axis.title = element_text(size = 14),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        return(
+            (pca_pop / pca_batch) +
+                plot_layout(guides = "collect", axes = "collect")
+        )
+    })
+```
+
+### *Aipysurus laevis*
+
+```{r pca-before-ala}
+pca_before_filtering$ALA
+```
+
+### *Hydrophis major*
+
+```{r pca-before-hma}
+pca_before_filtering$HMA
+```
+
+### *Hydrophis stokesii*
+
+```{r pca-before-hst}
+pca_before_filtering$HST
+```
+
+## Explore LD and MAF
+
+To combat the outliers and batch effects, we're going to apply some basic filters.
+
+- LD: Remove SNPs in linkage (i.e. keep one locus from each loci)
+- Minor allele frequency (MAF): Apply a minor allele frequency to each population
+
+### MAF
+
+#### By population
+
+Before we apply MAF, we'll see what threshold we can apply to each population,
+as MAF is dependent on the sample size.
+
+Briefly, if we have four diploid samples from a population, each sample
+contributes two alleles at each locus (variant site). This means we have
+eight alleles at each locus. If one sample is a heterozygote at alocus, the MAF
+threshold is $\frac{1}{8}=0.125$. Setting a MAF of lower than 0.125 makes no sense
+when we have four samples, as the lowest MAF our dataset can reach is 0.125.
+
+Below is a table that shows the minimum MAF we can calculate for each
+species-population pairing.
+
+```{r maf-by-species-pop}
+pops |>
+    summarise(N = n(), .by = c(species, population)) |>
+    arrange(species, desc(N)) |>
+    mutate(
+        `2N` = 2 * N,
+        MAF_threshold = 1/`2N`
+    ) |>
+    gt(groupname_col = "species") |>
+    fmt_number(
+        columns = 5,
+        n_sigfig = 2
+    ) |>
+    as_raw_html()
+```
+
+We can see that some of our population sampling is patchy, meaning we can have
+thresholds ranging from $\text{MAF}=0.5$ when we only have one sample (not really
+meaningful) to $\text{MAF}\approx0.005$ in some populations. This indicates that
+we'll probably be better off applying a global MAF filter across all samples.
+
+#### Global MAF filter (across the whole species)
+
+An alternative approach could be to apply MAF filters by species rather than
+just by population. This gives us greater sampling, but could result in the loss
+of true genetic signal within populations. This is a key consideration depending
+on the type of analysis you're undertaking. As we have some populations with
+low sampling, in addition to the population groupings being somewhat arbitary,
+a global MAF filter is a reasonable approach to take.
+
+The table below shows that we can have a much lower MAF threshold if we wanted
+to keep alleles found in only one individual per species. Again, using a threshold
+this low is probably not advisable (unless maybe doing SFS stuff) as singletons
+can be rife in samples that are poor quality.
+
+```{r maf-by-species}
+pops |>
+    summarise(N = n(), .by = species) |>
+    mutate(
+        `2N` = 2 * N,
+        MAF_threshold = 1/`2N`
+    ) |>
+    gt() |>
+    fmt_number(
+        columns = 4,
+        n_sigfig = 2
+    ) |>
+    as_raw_html()
+```
+
+### Applying global MAF filter
+
+Below we'll apply a range of global MAF filters and see how they impact a) SNP
+count and B) the PCA. At this point we're also removing all monomorphic SNPs.
+
+```{r apply-maf-filters-by-pop}
+pca_maf_impact <- gds_files |>
+    imap(\(x, species) {
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        keep <- sample_ids[! sample_ids %in% samples_remove]
+        
+        maf <- c(0.005, 0.01, 0.05)
+        
+        # All samples
+        pc_all <- maf |>
+            map(\(m) {
+                pca_maf_all <- SNPRelate::snpgdsPCA(
+                    gds,
+                    autosome.only = FALSE,
+                    remove.monosnp = TRUE,
+                    maf = m,
+                    num.thread=4,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                as_tibble(pca_maf_all$eigenvect) |>
+                    mutate(sample = pca_maf_all$sample.id, .before = V1) |>
+                    select(sample, V1, V2) |>
+                    left_join(pops, by = join_by(sample)) |>
+                    left_join(run_info, by = join_by(sample)) |>
+                    mutate(
+                        condition = "All",
+                        maf = m
+                    )
+            }) |>
+            bind_rows()
+        
+        # WA samples
+        wa_samples <- pops |>
+            filter(
+                species == species,
+                population %in% c(
+                    "Shark Bay", "Exmouth Gulf", "Pilbara",
+                    "Broome",  "North Kimberley"
+                )
+            ) |>
+            pull(sample)
+        keep <- keep[keep %in% wa_samples]
+        
+        pc_wa <- maf |>
+            map(\(m) {
+                pca_maf_wa <- SNPRelate::snpgdsPCA(
+                    gds,
+                    autosome.only = FALSE,
+                    remove.monosnp = TRUE,
+                    maf = m,
+                    num.thread=4,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                as_tibble(pca_maf_wa$eigenvect) |>
+                    mutate(sample = pca_maf_wa$sample.id, .before = V1) |>
+                    select(sample, V1, V2) |>
+                    left_join(pops, by = join_by(sample)) |>
+                    left_join(run_info, by = join_by(sample)) |>
+                    mutate(
+                        condition = "WA",
+                        maf = m
+                    )
+            }) |>
+            bind_rows()
+        seqClose(gds)
+        
+        data <- bind_rows(pc_all, pc_wa)
+        
+        pca_pop <- data |>
+            ggplot(aes(x = V1, y = V2, colour = population, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = pal_PCA, drop = FALSE) +
+            labs(
+                colour = "Population",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_grid2(
+                maf ~ condition,
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text.x = element_text(size = 14, face = "bold"),
+                strip.text.y = element_blank(),
+                axis.title = element_text(size = 14),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        pca_batch <- data |>
+            ggplot(aes(x = V1, y = V2, colour = `Sequencing date`, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = c("#453947FF", "#FED789FF"), drop = FALSE) +
+            labs(
+                colour = "Sequencing date",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_grid2(
+                maf ~ condition,
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text = element_text(size = 14, face = "bold"),
+                axis.title = element_text(size = 14),
+                axis.title.y = element_blank(),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        return(
+            (pca_pop | pca_batch) +
+                plot_layout(guides = "collect")
+        )
+    })
+```
+
+#### *Aipysurus laevis*
+
+```{r}
+pca_maf_impact$ALA 
+```
+
+#### *Hydrophis major*
+
+```{r}
+pca_maf_impact$HMA
+```
+
+#### *Hydrophis stokesii*
+
+We can see significant batch effects remain in *H. stokesii* even after 
+applying our MAF filter.
+
+```{r}
+pca_maf_impact$HST
+```
+
+### LD
+
+Another issue we face is linkage. SNPs in close proximity are usually inherited
+together, meaning they share similar evolutionary histories. Therefore, linked
+loci can drive artificial signal in structure and diversity analyses if not
+removed.
+
+Below we apply a range of LD filters to see what impact they have on the data.
+We again remove monomorphic sites, but we don't apply a MAF filter. We simply
+want to see what impact LD has on the PCA.
+
+```{r}
+pca_ld_impact <- gds_files |>
+    imap(\(x, species) {
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        keep <- sample_ids[! sample_ids %in% samples_remove]
+        
+        ld <- seq(0.1, 0.6, 0.1)
+        
+        pc_all <- ld |>
+            map(\(l) {
+                snp_set <- snpgdsLDpruning(
+                    gds,
+                    ld.threshold = l,
+                    autosome.only = FALSE,
+                    start.pos = "random",
+                    num.thread = 4,
+                    maf = NaN,
+                    remove.monosnp = TRUE,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                snp_set_id <- unlist(unname(snp_set))
+                
+                pca_out <- SNPRelate::snpgdsPCA(
+                    gds,
+                    autosome.only = FALSE,
+                    num.thread=4,
+                    remove.monosnp = TRUE,
+                    maf = NaN,
+                    snp.id = snp_set_id,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                as_tibble(pca_out$eigenvect) |>
+                    mutate(sample = pca_out$sample.id, .before = V1) |>
+                    select(sample, V1, V2) |>
+                    left_join(pops, by = join_by(sample)) |>
+                    left_join(run_info, by = join_by(sample)) |>
+                    mutate(
+                        condition = "All",
+                        LD = l
+                    )
+            }) |>
+            bind_rows()
+        
+        
+        # WA samples
+        wa_samples <- pops |>
+            filter(
+                species == species,
+                population %in% c(
+                    "Shark Bay", "Exmouth Gulf", "Pilbara",
+                    "Broome",  "North Kimberley"
+                )
+            ) |>
+            pull(sample)
+        keep <- keep[keep %in% wa_samples]
+        
+        pc_wa <- ld |>
+            map(\(l) {
+                snp_set <- snpgdsLDpruning(
+                    gds,
+                    ld.threshold = l,
+                    autosome.only = FALSE,
+                    start.pos = "random",
+                    num.thread = 4,
+                    remove.monosnp = TRUE,
+                    maf = NaN,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                snp_set_id <- unlist(unname(snp_set))
+                
+                pca_out <- SNPRelate::snpgdsPCA(
+                    gds,
+                    autosome.only = FALSE,
+                    num.thread=4,
+                    remove.monosnp = TRUE,
+                    maf = NaN,
+                    snp.id = snp_set_id,
+                    sample.id = keep,
+                    verbose = FALSE
+                )
+                
+                as_tibble(pca_out$eigenvect) |>
+                    mutate(sample = pca_out$sample.id, .before = V1) |>
+                    select(sample, V1, V2) |>
+                    left_join(pops, by = join_by(sample)) |>
+                    left_join(run_info, by = join_by(sample)) |>
+                    mutate(
+                        condition = "WA",
+                        LD = l
+                    )
+            }) |>
+            bind_rows()
+        
+        seqClose(gds)
+        
+        data <- bind_rows(pc_all, pc_wa)
+        
+        pca_pop <- data |>
+            ggplot(aes(x = V1, y = V2, colour = population, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = pal_PCA, drop = FALSE) +
+            labs(
+                colour = "Population",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_grid2(
+                LD ~ condition,
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text.x = element_text(size = 14, face = "bold"),
+                strip.text.y = element_blank(),
+                axis.title = element_text(size = 14),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        pca_batch <- data |>
+            ggplot(aes(x = V1, y = V2, colour = `Sequencing date`, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = c("#453947FF", "#FED789FF"), drop = FALSE) +
+            labs(
+                colour = "Sequencing date",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_grid2(
+                LD ~ condition,
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text = element_text(size = 14, face = "bold"),
+                axis.title = element_text(size = 14),
+                axis.title.y = element_blank(),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        (pca_pop | pca_batch) +
+            plot_layout(guides = "collect")
+    })
+```
+
+#### *Aipysurus laevis*
+
+```{r}
+pca_ld_impact$ALA
+```
+
+#### *Hydrophis major*
+
+```{r}
+pca_ld_impact$HMA
+```
+
+#### *Hydrophis stokesii*
+
+```{r}
+pca_ld_impact$HST
+```
+
+## Filtering data: MAF $\leq0.01$ and LD $\leq$ 0.3
+
+From the figures above, a higher MAF appears to remove a lot of low-frequency
+variants that are unique to a few problematic samples while maintaining the
+expected population groupings. LD had less of an impact than MAF, but is still
+a good filter to apply.
+
+Below we apply a LD filter of 0.3, in addition to a MAF filter of 0.01.
+
+```{r clean-vcf}
+pca_filtered <- gds_files |>
+    imap(\(x, species) {
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        keep <- sample_ids[! sample_ids %in% samples_remove]
+        
+        snp_set <- snpgdsLDpruning(
+            gds,
+            ld.threshold = 0.3,
+            maf = 0.01,
+            autosome.only = FALSE,
+            start.pos="random",
+            num.thread=4,
+            remove.monosnp = TRUE,
+            sample.id = keep,
+            verbose = FALSE
+        )
+        
+        snpset_id <- unlist(unname(snp_set))
+        
+        pca_out_all <- SNPRelate::snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            num.thread=4,
+            maf = 0.01,
+            remove.monosnp = TRUE,
+            snp.id = snpset_id,
+            sample.id = keep,
+            verbose = FALSE
+        )
+        
+        pc_all <- as_tibble(pca_out_all$eigenvect) |>
+            mutate(sample = pca_out_all$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            left_join(run_info, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        wa_samples <- pops |>
+            filter(
+                species == species,
+                population %in% c(
+                    "Shark Bay", "Exmouth Gulf", "Pilbara",
+                    "Broome",  "North Kimberley"
+                )
+            ) |>
+            pull(sample)
+        keep_wa <- keep[keep %in% wa_samples]
+        
+        snp_set_wa <- snpgdsLDpruning(
+            gds,
+            ld.threshold = 0.3,
+            maf = 0.01,
+            autosome.only = FALSE,
+            start.pos="random",
+            num.thread=4,
+            remove.monosnp = TRUE,
+            sample.id = keep_wa,
+            verbose = FALSE
+        )
+        
+        snpset_id_wa <- unlist(unname(snp_set_wa))
+        
+        pca_out_wa <- SNPRelate::snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            num.thread = 4,
+            remove.monosnp = TRUE,
+            maf = 0.01,
+            snp.id = snpset_id_wa,
+            sample.id = keep_wa,
+            verbose = FALSE
+        )
+        
+        pc_wa <- as_tibble(pca_out_wa$eigenvect) |>
+            mutate(sample = pca_out_wa$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            left_join(run_info, by = join_by(sample)) |>
+            mutate(condition = "WA")
+        
+        seqClose(gds)
+        
+        data <- bind_rows(pc_all, pc_wa)
+        
+        pca_pop <- data |>
+            ggplot(aes(x = V1, y = V2, colour = population, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = pal_PCA, drop = FALSE) +
+            labs(
+                colour = "Population",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_wrap2(
+                vars(condition),
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text.x = element_text(size = 14, face = "bold"),
+                axis.title = element_text(size = 14),
+                axis.title.x = element_blank(),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        pca_batch <- data |>
+            ggplot(aes(x = V1, y = V2, colour = `Sequencing date`, text = sample)) +
+            geom_point(size = 3, show.legend = TRUE) +
+            scale_colour_manual(values = c("#453947FF", "#FED789FF"), drop = FALSE) +
+            labs(
+                colour = "Sequencing date",
+                x = "PC1",
+                y = "PC2"
+            ) +
+            ggh4x::facet_wrap2(
+                vars(condition),
+                scales = "free",
+                axes = "all"
+            ) +
+            theme_classic() +
+            theme(
+                strip.background = element_blank(),
+                strip.text = element_blank(),
+                axis.title = element_text(size = 14),
+                axis.text = element_text(size = 11),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 11)
+            )
+        
+        final_plot <- (pca_pop / pca_batch) +
+            plot_layout(guides = "collect")
+        return(
+            list(
+                "plot" = final_plot,
+                "pca_wa" = pca_out_wa,
+                "snp_set_wa" = snpset_id_wa,
+                "pop_data" = data
+                
+            )
+        )
+    })
+```
+
+### *Aipysurus laevis*
+
+```{r pca-filtered-ala}
+pca_filtered$ALA$plot
+```
+
+### *Hydrophis major*
+
+```{r pca-filtered-hma}
+pca_filtered$HMA$plot
+```
+
+### *H. stokesii*
+
+At the WA population level, batch effects are still an issue.
+
+```{r}
+pca_filtered$HST$plot
+```
+
+### Removing batch effects from *H. stokesii*
+
+We can see that *H. stokesii* is still separating by batch along PC1. We'll
+remove SNPs that are heavily loaded to that PC and remove them. From the histogram
+of SNP loadings below, we can see that the tail starts to flatten around 0.04.
+
+```{r remove-batch}
+wa_samples <- pops |>
+    filter(
+        species == "HST",
+        population %in% c(
+            "Shark Bay", "Exmouth Gulf", "Pilbara",
+            "Broome",  "North Kimberley"
+        )
+    ) |>
+    pull(sample)
+
+gds <- seqOpen(gds_files[[3]])
+sample_ids <- seqGetData(gds, "sample.id")
+keep_hst <- sample_ids[! sample_ids %in% samples_remove]
+keep_hst <- keep_hst[keep_hst %in% wa_samples]
+
+snp_loadings <- snpgdsPCASNPLoading(pca_filtered$HST$pca_wa, gds, verbose = FALSE)
+
+snp_loadings_pc1 <- sort(
+    abs(snp_loadings$snploading[1,]),
+    decreasing = TRUE,
+    index.return = TRUE
+)[[1]] |>
+    as_tibble() |>
+    rename(loadings = value)
+
+# Visualise SNP loading distribution
+snp_loadings_pc1 |>
+    ggplot(aes(x = loadings)) +
+    geom_histogram(colour = "black", fill = "grey80") +
+    scale_x_continuous(
+        breaks = seq(0,0.16, 0.02),
+        labels = as.character(seq(0,0.16, 0.02)),
+        expand = c(0.01, 0)
+    ) +
+    scale_y_continuous(expand = c(0.01, 0)) +
+    geom_vline(xintercept = 0.04, linetype = "dashed", colour = "red") +
+    labs(
+        x = "PC1 SNP-loadings",
+        y = NULL
+    ) +
+    theme_classic() +
+    theme(
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14)
+    )
+```
+
+We're going to remove any SNPs with a loading $\geq0.04$ from the analysis. As
+we can see, this has done a good job of removing the batch effects, while only
+removing $\approx100$ SNPs.
+
+```{r}
+# #extract SNP.IDs for loadings on PC 1 > abs(0.05) 
+batch_snp_ids <- snp_loadings$snp.id[which(abs(snp_loadings$snploading[1,]) >= 0.04)]
+
+# rerun PCA
+snp_ids_batch_filtered <- setdiff(pca_filtered$HST$snp_set_wa, batch_snp_ids)
+
+# Re-run the PCA with batch-snps removed (same filtering as before)
+pc_wa_batch_remove = SNPRelate::snpgdsPCA(
+    gds,
+    autosome.only = FALSE, 
+    num.thread = 4, 
+    remove.monosnp = TRUE, 
+    maf = 0.01,
+    snp.id = snp_ids_batch_filtered,
+    sample.id = keep_hst,
+    verbose = FALSE
+)
+
+data <- as_tibble(pc_wa_batch_remove$eigenvect) |>
+    mutate(sample = pc_wa_batch_remove$sample.id, .before = V1) |>
+    select(sample, V1, V2) |>
+    left_join(pops, by = join_by(sample)) |>
+    left_join(run_info, by = join_by(sample))
+
+pca_batch_hst_wa <- data |>
+    ggplot(aes(x = V1, y = V2, colour = `Sequencing date`, text = sample)) +
+    geom_point(size = 4, show.legend = TRUE) +
+    labs(
+        x = "PC1",
+        y = "PC2"
+    ) +
+    scale_colour_manual(values = c("#453947FF", "#FED789FF"), drop = FALSE) +
+    theme_classic()
+
+pca_pop_hst_wa <- data |>
+    ggplot(aes(x = V1, y = V2, colour = population, text = sample)) +
+    geom_point(size = 4, show.legend = TRUE) +
+    labs(
+        # title = glue::glue("WA {species} N SNPs = {length(snpset_id_wa)}"),
+        x = "PC1",
+        y = "PC2"
+    ) +
+    scale_colour_manual(values = pal_PCA, drop = FALSE) +
+    theme_classic()
+
+(pca_batch_hst_wa | pca_pop_hst_wa) +
+    plot_layout(guides = "collect")
+
+# seqClose(gds)
+```
+
+## Write clean VCF files
+
+Finally, we're going to write cleaned VCF files which we can use for all remaining
+downstream analyses.
+
+### *Hydrophis stokesii*
+
+First, we'll write the new VCF for *Hydrophis stokesii* using the batch-filtered
+dataset for **WA samples only**.
+
+```{r}
+# Final set of SNPs for WA HST
+seqSetFilter(gds, sample.id = keep_hst, variant.id = snp_ids_batch_filtered, verbose = FALSE)
+seqGDS2VCF(
+    gds, 
+    here("results", "variant-filtering", "HST-wa-ld-maf.vcf.gz"), 
+    verbose = FALSE,
+    use_Rsamtools = TRUE,
+)
+seqClose(gds)
+```
+
+### *Aipysurus laevis* and *Hydrophis major*
+
+Lastly, we write VCF files for *Aipysurus laevis* and *Hydrophis major*, in
+addition to the all-samples VCF for *Hydrophis stokesii*.
+
+```{r}
+gds_files |>
+    iwalk(\(x, species) {
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        keep <- sample_ids[! sample_ids %in% samples_remove]
+        
+        # Apply filter for all populations
+        snp_set <- snpgdsLDpruning(
+            gds,
+            ld.threshold = 0.3,
+            maf = 0.01,
+            autosome.only = FALSE,
+            start.pos="random",
+            num.thread = 4,
+            remove.monosnp = TRUE,
+            sample.id = keep,
+            verbose = FALSE
+        )
+        
+        snpset_id <- unlist(unname(snp_set))
+        
+        seqSetFilter(gds, sample.id = keep, variant.id = snpset_id, verbose = FALSE)
+        seqGDS2VCF(
+            gds, 
+            here("results", "variant-filtering", glue::glue("{species}-ld-maf.vcf.gz")), 
+            verbose = FALSE, 
+            use_Rsamtools = TRUE
+        )
+        
+        seqClose(gds)
+    })
+```
+
+## Export clean population-map files
+
+```{r export-clean-popmap}
+pca_filtered$ALA$pop_data |>
+    select(sample, population) |>
+    distinct() |>
+    write_tsv(
+        file = here("data", "popmaps", "ALA-clean-popmap.tsv"),
+        col_names = FALSE
+    )
+
+pca_filtered$HMA$pop_data |>
+    select(sample, population) |>
+    distinct() |>
+    write_tsv(
+        file = here("data", "popmaps", "HMA-clean-popmap.tsv"),
+        col_names = FALSE
+    )
+pca_filtered$HST$pop_data |>
+    select(sample, population) |>
+    distinct() |>
+    write_tsv(
+        file = here("data", "popmaps", "HST-clean-popmap.tsv"),
+        col_names = FALSE
+    )
+```
+
+
+
+
