@@ -12,7 +12,7 @@ the relevant outputs.
 
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(
-    echo = TRUE, message = FALSE, 
+    echo = FALSE, message = FALSE, 
     warning = FALSE, error = FALSE,
     fig.height = 10, fig.width = 10, fig.dpi=300,
     out.width = "100%"
@@ -24,12 +24,36 @@ suppressPackageStartupMessages({
     library(patchwork)
     library(here)
     library(gt)
+    library(fs)
+    library(SeqArray)
+    library(SNPRelate)
 })
 
 theme_set(theme_bw())
 
+pop_levels <- c(
+    "Shark Bay" ,"Exmouth Gulf", "Pilbara", 
+    "Broome", "North Kimberley", "Scott Reef", "Ashmore", "Heywood Shoal",
+    "Gulf of Carpentaria", "North QLD", "South QLD", "New Caledonia"
+)
+
+PAL <- c(
+    "#DCB0F2FF","#F89C74FF", "#F6CF71FF", "#66C5CCFF","#FE88B1FF", "#87C55FFF",
+    "#B497E7FF", "#B3B3B3FF", "#C9DB74FF", "#9EB9F3FF", "#D3B484FF", "#8BE0A4FF"
+)
+names(PAL) <- c(
+    "Shark Bay", "Exmouth Gulf", "Pilbara", 
+    "Broome", "Scott Reef", "Ashmore",
+    "Heywood Shoal", "North Kimberley", "Gulf of Carpentaria", 
+    "North QLD", "South QLD", "New Caledonia"
+)
+
+# Custom ordering of colour palette
+PALST <- c("#1982c4", "#1982c470", "#1982c430", "grey90", "grey70", "grey50")
+names(PALST) <- 1:6
+
 # Set the populations
-wa_pops <- c("Shark_Bay", "Exmouth_Gulf", "Pilbara", "Broome", "North_Kimberley")
+wa_pops <- c("Shark Bay", "Exmouth Gulf", "Pilbara", "Broome", "North Kimberley")
 
 pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
     read_delim(
@@ -40,8 +64,13 @@ pops <- fs::dir_ls(here("data", "popmaps"), glob = "*.txt") |>
     ) |>
     mutate(
         population = str_replace_all(population, "_", " "),
-        species = str_remove(basename(species), "-.*")
+        species = str_remove(basename(species), "-.*"),
+        population = factor(population, levels = names(PAL))
     )
+
+wa_samples <- pops |>
+    filter(population %in% wa_pops) |>
+    pull(sample)
 
 popmap_lat_long <- fs::dir_ls(
     here("data", "popmaps", "popmaps-lat-long"), 
@@ -51,124 +80,48 @@ popmap_lat_long <- fs::dir_ls(
     bind_rows() |>
     unite(col = "sample", sep = "-", species, id, targetid) |>
     mutate(sample = str_replace_all(sample, " ", "-"))
-
-ignore <- fs::dir_ls(here("results", "population-structure"), glob = "*.txt") |>
-    read_tsv(
-        col_names = "population",
-        col_types = cols()
-    ) |>
-    distinct() |>
-    pull() |>
-    str_replace_all("_", " ")
-
-# Problem samples to remove 
-samples_remove <- read_tsv(
-    here("data", "popmaps", "dropped-samples.tsv"), 
-    skip = 1, 
-    col_names = c("sample", "pop"),
-    col_types = cols()
-) |>
-    pull(sample)
 ```
 
-## Helper functions
-
-This helper function is for generating the PCAs. It handles finding `x` and `y`
-maxima/minima and formatting.
-
-```{r helper-function-plotting}
-# Function that takes the PCA list we'll generate below and plot the desired PCs
-# for the specified population
-plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, xstep = 1, ystep = 1, pal) {
-    full_species <- set_names(c("ALA", "HMA", "HST"), c("Aipysurus laevis", "Hydrophis major", "Hydrophis stokesii"))
-    plot_title <- names(full_species[full_species == spec])
+```{r helper-functions, echo=FALSE}
+.plot_pca <- function(obj, species, grp) {
+    pc1_min_max <- range(pretty(range(obj[[species]][[grp]]$pca$V1), n = 5))
+    pc2_min_max <- range(pretty(range(obj[[species]][[grp]]$pca$V2), n = 5))
+    var <- obj[[species]][[grp]]$variance[c(1,2)]
     
-    sp_pca <- pca_dataframe |>
-        filter(species == spec, WA == WA_only)
-    
-    sp_var <- variance_dataframe |>
-        filter(species == spec, WA == WA_only)
-    
-    if(WA_only){
-        wa_levels <- pca_dataframe |> 
-            filter(WA == TRUE) |> 
-            pull(population) |> 
-            unique() |>
-            as.character()
-        
-        sp_pca <- sp_pca |>
-            mutate(
-                population = factor(
-                    population,
-                    levels = wa_levels
-                )
-            )
-    }
-    
-    # x-axis: max/min
-    xmin <- sp_pca |>
-        pull(pcA) |>
-        min(na.rm = TRUE) |>
-        floor()
-    
-    xmax <- sp_pca |>
-        pull(pcA) |>
-        max(na.rm = TRUE) |>
-        ceiling()
-    
-    # y-axis: max/min
-    ymin <- sp_pca |>
-        pull(pcB) |>
-        min(na.rm = TRUE) |>
-        floor()
-    
-    ymax <- sp_pca |>
-        pull(pcB) |>
-        max(na.rm = TRUE) |>
-        ceiling()
-    
-    # Variance strings
-    pcA_var <- round(
-        sp_var |>
-            filter(pc_axes == pcA) |>
-            pull(variance) * 100, digits = 2
+    spc <- case_when(
+        species == "ALA" ~ "Aipysurus laevis",
+        species == "HMA" ~ "Hydrophis major",
+        species == "HST" ~ "Hydrophis stokesii",
+        .default = "Unknown"
     )
     
-    pcB_var <- round(
-        sp_var |>
-            filter(pc_axes == pcB) |>
-            pull(variance) * 100, digits = 2
-    )
-    
-    sp_pca |>
+    obj[[species]][[grp]]$pca |>
         ggplot(
             aes(
-                x = .data[[pcA]], y = .data[[pcB]],
+                x = V1, y = V2,
                 colour = population
             )
         ) +
-        geom_point(size = 2.5, show.legend=TRUE) +
+        geom_point(size = 2.5, show.legend = TRUE) +
         scale_colour_manual(
-            values = pal,
+            values = PAL,
             drop = FALSE
         ) +
         labs(
-            title = glue::glue("{plot_title}"),
+            title = glue::glue("{spc}"),
             colour = "Population",
-            x = glue::glue("{pcA} ({pcA_var}%)"),
-            y = glue::glue("{pcB} ({pcB_var}%)")
-        ) +
-        scale_y_continuous(
-            limits = c(ymin, ymax),
-            breaks = seq(ymin, ymax, by = ystep),
-            labels = as.character(seq(ymin, ymax, by = ystep)),
-            expand = c(0, 0)
+            x = glue::glue("PC1 ({var[1]}%)"),
+            y = glue::glue("PC2 ({var[2]}%)")
         ) +
         scale_x_continuous(
-            limits = c(xmin, xmax),
-            breaks = seq(xmin, xmax, by = xstep),
-            labels = as.character(seq(xmin, xmax, by = xstep)),
-            expand = c(0, 0)
+            limits = c(pc1_min_max[1], pc1_min_max[2]),
+            breaks = scales::breaks_pretty(n = 5),
+            expand = c(0.01, 0)
+        ) +
+        scale_y_continuous(
+            limits = c(pc2_min_max[1], pc2_min_max[2]),
+            breaks = scales::breaks_pretty(n = 5),
+            expand = c(0.01, 0)
         ) +
         theme(
             axis.text = element_text(size = 14),
@@ -180,101 +133,222 @@ plotPCA <- function(pca_dataframe, variance_dataframe, spec, WA_only, pcA, pcB, 
             plot.title = element_text(hjust = 0.5, face = "bold.italic")
         )
 }
+
+plot_pca <- function(obj){
+    plots <- obj |>
+        imap(\(x, i) {
+            plot_all <- .plot_pca(obj = obj, species = i, grp = "all")
+            plot_wa <- .plot_pca(obj = obj, species = i, grp = "wa")
+            list("all" = plot_all, "wa" = plot_wa)
+        })
+    
+    return(plots)
+}
+
+# STRUCTURE plotting
+my_plot_structure <- function(dat, spec, k, cond, pal_pop, pal_k) {
+    
+    colour_bar <- dat |>
+        filter(species == spec, K == k, condition == cond) |>
+        select(sample, population, species) |>
+        distinct() |>
+        mutate(size = 1) |>
+        ggplot(aes(x = sample, y = size, fill = population)) +
+        geom_col(width = 1, show.legend = TRUE) +
+        scale_fill_manual(values = pal_pop, drop = FALSE) +
+        scale_y_continuous(expand = c(0,0)) +
+        labs(x = NULL) + 
+        theme(
+            axis.text.y = element_blank(),
+            axis.title.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+        ) +
+        theme(
+            legend.position = "top",
+            legend.title = element_blank()
+        )
+    
+    columns <- dat |>
+        filter(species == spec, K == k, condition == cond) |>
+        ggplot(aes(x = sample, y = proportion, fill = partition)) +
+        geom_col(position = "stack", show.legend = TRUE) +
+        scale_fill_manual(values = pal_k, drop = FALSE) +
+        scale_y_continuous(
+            limits = c(0, 1.001),
+            breaks = scales::pretty_breaks(n = 5),
+            expand = c(0, 0)
+        ) +
+        labs(x = NULL) +
+        guides(fill = guide_legend(title.position = "bottom")) +
+        theme(
+            axis.title.y = element_blank(),
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
+            legend.position = "bottom",
+            legend.title = element_text(hjust = 0.5),
+            strip.text.x = element_text(
+                face = "bold",
+                hjust = 0.5,
+                size = 14,
+                angle = 90
+            ),
+            strip.text.y = element_text(size = 14, hjust = 0.5),
+            strip.background = element_rect(fill='transparent', colour = NA),
+            panel.spacing.x = unit(0.4, "line"),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+        )
+    
+    structure_plot <- colour_bar / columns +
+        plot_layout(heights = c(1,4), axes = "collect") &
+        theme(
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()
+        )    
+    
+    structure_plot
+}
 ```
-
-## Removed samples
-
-A range of samples were excluded from the PCAs below. Further numerous populations
-were ignored when running `STRUCTURE`. These can be found in the following files
-
-- [dropped-samples.tsv][dropped]
-- Per-species populations to ignore ([here][ignore])
 
 ## PCA
 
-Principal component analysis (PCA) was conducted using the [Ipyrad analysis toolkit][ipatools].
-The code responsible for the CSV files we're loading in below can be found
-[here][pcaipynb]. Below, we're simply creating custom figures. We generate PCAs
-for **all** samples across all populations for each species.
+Below we use `SNPRelate` to perform principal component analysis (PCA). The
+VCF files have already been filtered for problem samples, on MAF and LD. Below
+we simply make the PCA figures.
 
-```{r load-pca-data}
-pop_levels <- c(
-    "Shark Bay" ,"Exmouth Gulf", "Pilbara", 
-    "Broome", "North Kimberley", "Scott Reef", "Ashmore", "Heywood Shoal",
-    "Gulf of Carpentaria", "North QLD", "South QLD", "New Caledonia"
-)
-
-# PCA dataframes
-df_pca <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*.csv") |>
-    (\(x) x[!str_detect(x, "variance")])() |>
-    (\(x) x[!str_detect(x, "batch")])() |>
-    imap(\(x, i) {
-        fname <- str_remove(basename(i), ".csv")
-        spec <- str_remove(fname, "-.*")
-        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
+```{r make-gds-for-clean-vcfs}
+dir_ls(
+    here("results", "variant-filtering"),
+    glob = "*.vcf.gz"
+) |>
+    walk(\(x){
+        fgds <- paste0(str_remove(x, "\\..*"), ".int.gds")
+        fgds_sa <- paste0(str_remove(x, "\\..*"), ".gds")
         
-        tmp <- x |>
-            read_csv(col_names = TRUE, col_types = cols())
-        colnames(tmp) <- c("sample", paste0("PC", 1:(ncol(tmp) - 1)))
-        pops |>
-            filter(species == spec) |>
-            inner_join(tmp) |>
-            mutate(WA = wa, .after = species)
-    }) |>
-    list_rbind() |>
-    select(species, WA, sample, population, PC1, PC2, PC3) |>
-    mutate(
-        population = str_replace_all(population, "_", " "),
-        population = factor(population, levels = pop_levels)
-    )
+        snpgdsVCF2GDS(vcf.fn = as.character(x), out.fn = fgds, verbose = FALSE) # intermediate - handles our VCF file
+        seqSNP2GDS(fgds, fgds_sa, storage.option = "LZMA_RA", verbose = FALSE)
+        fs::file_delete(path = fgds)
+    })
 
-# Variance dataframes
-df_variance <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*variance.csv") |>
+gds_files <- fs::dir_ls(
+    here("results", "variant-filtering"),
+    glob = "*.gds"
+) |>
+    as.character() |>
+    (\(x) set_names(x, str_remove(basename(x), "-ld.*")))()
+
+pca_data <- gds_files |>
+    (\(x) x[names(x) != "HST-wa"])() |>
     imap(\(x, i) {
-        fname <- str_remove(basename(i), ".csv")
-        spec <- str_remove(fname, "-.*")
-        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
-        x |>
-            read_csv(
-                skip = 1,
-                col_names = c("pc_axes", "variance"),
-                col_types = cols()
-            ) |>
-            mutate(
-                species = spec,
-                WA = wa,
-                pc_axes = pc_axes + 1,
-                pc_axes = paste0("PC", pc_axes)
-            ) |>
-            filter(pc_axes %in% c("PC1", "PC2", "PC3"))
-    }) |>
-    list_rbind()
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        sample_ids_wa <- sample_ids[sample_ids %in% wa_samples]
+        pca_all <- snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            maf = NaN,
+            num.thread = 4,
+            verbose = FALSE
+        )
+        var_all <- round(pca_all$varprop*100, 2)
+        
+        pc_all <- as_tibble(pca_all$eigenvect) |>
+            mutate(sample = pca_all$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        
+        pca_wa <- snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            maf = NaN,
+            num.thread = 4,
+            verbose = FALSE,
+            sample.id = sample_ids_wa
+        )
+        var_wa <- round(pca_wa$varprop*100, 2)
+        
+        pc_wa <- as_tibble(pca_wa$eigenvect) |>
+            mutate(sample = pca_wa$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        seqClose(gds)
+        
+        return(
+            list(
+                "all" = list("pca" = pc_all, "variance" = var_all),
+                "wa" = list("pca" = pc_wa, "variance" = var_wa)
+            )
+        )
+    })
 ```
 
-```{r get-legend}
-# Custom ordering of colour palette
-pal_PCA <- c(
-    "#DCB0F2FF","#F89C74FF", "#F6CF71FF", "#66C5CCFF","#FE88B1FF", "#87C55FFF",
-    "#B497E7FF", "#B3B3B3FF", "#C9DB74FF", "#9EB9F3FF", "#D3B484FF", "#8BE0A4FF"
-)
-names(pal_PCA) <- c(
-    "Shark Bay", "Exmouth Gulf", "Pilbara", 
-    "Broome", "Scott Reef", "Ashmore",
-    "Heywood Shoal", "North Kimberley", "Gulf of Carpentaria", 
-    "North QLD", "South QLD", "New Caledonia"
-)
+We'll also process the WA *Hydrophis stokesii* results separately, as these data
+are stored in a separate VCF file.
+
+```{r pca-wa-hst}
+pca_data_wa_hst <- gds_files |>
+    (\(x) x[names(x) == "HST-wa"])() |>
+    imap(\(x, i) {
+        gds <- seqOpen(x)
+        sample_ids <- seqGetData(gds, "sample.id")
+        sample_ids_wa <- sample_ids[sample_ids %in% wa_samples]
+        pca_all <- snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            maf = NaN,
+            num.thread = 4,
+            verbose = FALSE
+        )
+        var_all <- round(pca_all$varprop*100, 2)
+        
+        pc_all <- as_tibble(pca_all$eigenvect) |>
+            mutate(sample = pca_all$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        
+        pca_wa <- snpgdsPCA(
+            gds,
+            autosome.only = FALSE,
+            maf = NaN,
+            num.thread = 4,
+            verbose = FALSE,
+            sample.id = sample_ids_wa
+        )
+        var_wa <- round(pca_wa$varprop*100, 2)
+        
+        pc_wa <- as_tibble(pca_wa$eigenvect) |>
+            mutate(sample = pca_wa$sample.id, .before = V1) |>
+            select(sample, V1, V2) |>
+            left_join(pops, by = join_by(sample)) |>
+            mutate(condition = "All")
+        
+        seqClose(gds)
+        
+        return(
+            list(
+                "all" = list("pca" = pc_all, "variance" = var_all),
+                "wa" = list("pca" = pc_wa, "variance" = var_wa)
+            )
+        )
+    })
+
+# Overwrite the WA results for HST
+pca_data$HST$wa <- pca_data_wa_hst$`HST-wa`$wa
 ```
 
 ### All samples
 
 ```{r pca-ALA}
-ala_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "ALA", pcA = "PC1", pcB = "PC2", xstep = 2, pal = pal_PCA)
-hst_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "HMA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
-hma_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = FALSE, spec = "HST", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
+pca_plots <- plot_pca(pca_data)
 
 design <- "12\n34"
-
-plot_pca_all <- ala_pc_1_2 + hst_pc_1_2 + hma_pc_1_2 + guide_area() +
+plot_pca_all <- (pca_plots$ALA$all + pca_plots$HST$all + pca_plots$HMA$all + guide_area()) +
     plot_layout(
         design = design,
         guides = "collect",
@@ -286,151 +360,15 @@ plot_pca_all <- ala_pc_1_2 + hst_pc_1_2 + hma_pc_1_2 + guide_area() +
 
 ragg::agg_png(
     filename = here("results", "population-structure", "pca-all-species-all-pops.png"),
-    width = 1500, 
+    width = 1500,
     height = 1500,
-    units = "px",  
+    units = "px",
     res = 150
 )
 plot_pca_all
 invisible(dev.off())
 
 plot_pca_all
-```
-
-### Batch effects: fine-scale population structure
-
-When exploring fine-scale population structure, it's important to be mindful
-that we're likely trying to identify very faint signals of diversity. Consequently,
-if there is any other technical artefact that introduces a singal of diversity,
-it will likely swamp any real biology.
-
-Here, we run PCAs for all three species using the broad-scale population filters
-(SNPs in 50% of sub-population individuals and 75% of all samples) for WA coast
-samples. We then apply stringent filtering of 90% for *A. laevis* and *H. major*,
-and 95% for *H. stokesii* and see what the impact is (these values were identified
-by trial-and-error).
-
-```{r pca-batch-effect-data}
-# Run information
-run_info <- fs::dir_ls(
-    here("data", "sample-sheets"),
-    glob = "*.csv"
-) |>
-    map(read_csv, col_types = cols()) |>
-    map(rename_with, str_to_title) |>
-    bind_rows() |>
-    mutate(
-        year = sub("DNote(.*)-.+", "\\1", Order),
-        year = as.integer(year),
-        `Sequencing date` = ifelse(year < 23, "Before 2023", "After 2023"),
-        `Sequencing date` = factor(`Sequencing date`, levels = c("Before 2023", "After 2023"))
-    ) |>
-    select(sample = Id_clean, order = Order, `Sequencing date`)
-
-# Add runinfo to clean WA PCA
-df_pca_wa <- df_pca |>
-    left_join(run_info) |>
-    filter(WA == TRUE) |>
-    mutate(dataset = "Stringent filter")
-
-# PCA WA populations using broad-scale filters
-df_pca_batch <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*batch_effects.csv") |>
-    (\(x) x[!str_detect(x, "variance")])() |>
-    imap(\(x, i) {
-        fname <- str_remove(basename(i), ".csv")
-        spec <- str_remove(fname, "-.*")
-        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
-        
-        tmp <- x |>
-            read_csv(col_names = TRUE, col_types = cols())
-        colnames(tmp) <- c("sample", paste0("PC", 1:(ncol(tmp) - 1)))
-        pops |>
-            filter(species == spec) |>
-            inner_join(tmp) |>
-            mutate(WA = wa, .after = species)
-    }) |>
-    list_rbind() |>
-    select(species, WA, sample, population, PC1, PC2, PC3) |>
-    mutate(
-        population = str_replace_all(population, "_", " "),
-        population = factor(population, levels = pop_levels),
-        dataset = "Relaxed filter"
-    ) |>
-    left_join(run_info)
-
-# Variance dataframes
-df_variance_batch <- fs::dir_ls(here("results", "population-structure", "pca"), glob = "*variance-batch_effects.csv") |>
-    imap(\(x, i) {
-        fname <- str_remove(basename(i), ".csv")
-        spec <- str_remove(fname, "-.*")
-        wa <- if(str_detect(fname, "WA")) TRUE else FALSE
-        x |>
-            read_csv(
-                skip = 1,
-                col_names = c("pc_axes", "variance"),
-                col_types = cols()
-            ) |>
-            mutate(
-                species = spec,
-                WA = wa,
-                pc_axes = pc_axes + 1,
-                pc_axes = paste0("PC", pc_axes)
-            ) |>
-            filter(pc_axes %in% c("PC1", "PC2", "PC3"))
-    }) |>
-    list_rbind()
-```
-
-What we can see is that using broad-scale filtering isn't adequate at the WA
-population level. The data clearly separates by sequencing date - before or after
-2023. DaRT changed how they provided data after 2023, so it's not unrealistic to
-assume that their protocols may have changed at the bench as well.
-
-Applying a more stringent filter helps reduce the effect sequencing date has
-on data grouping, though it's evident that it still has some impact. However, we
-can see that separation in *A. laevis* and *H. stokesii* no longer persists
-once we apply more stringent filters, while it does in *H. major*. At this point,
-a tigher filter is the best we can do.
-
-```{r batch-effects}
-plot_batch_effects <- bind_rows(df_pca_wa, df_pca_batch) |>
-    mutate(
-        spec = case_when(
-            species == "ALA" ~ "Aipysurus laevis",
-            species == "HMA" ~ "Hydrophis major",
-            species == "HST" ~ "Hydrophis stokesii"
-        )
-    ) |>
-    ggplot(aes(x = PC1, y = PC2, colour = `Sequencing date`)) +
-    geom_point(size = 3) +
-    scale_colour_manual(values = c("#FF8811FF", "#046E8FFF")) +
-    ggh4x::facet_grid2(rows = vars(dataset), cols = vars(spec), axes = "all") +
-    guides(
-        colour = guide_legend(title.position = "top")
-    ) +
-    theme_classic() +
-    theme(
-        axis.text = element_text(size = 14),
-        axis.title = element_text(size = 14, face = "bold"),
-        strip.background = element_blank(),
-        strip.text = element_text(size = 14),
-        strip.text.x = element_text(face = "italic"),
-        legend.title = element_text(size = 14, hjust = 0.5, face = "bold"),
-        legend.text = element_text(size = 14),
-        legend.position = "bottom"
-    )
-
-ragg::agg_png(
-    filename = here("results", "population-structure", "pca-batch_effects-WA.png"),
-    width = 1500, 
-    height = 1000,
-    units = "px",  
-    res = 150
-)
-plot_batch_effects
-invisible(dev.off())
-
-plot_batch_effects
 ```
 
 ### WA Coast
@@ -438,18 +376,12 @@ plot_batch_effects
 And the same for *just* the WA coastline samples
 
 ```{r}
-ala_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "ALA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
-hma_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "HMA", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
-hst_pc_1_2 <- plotPCA(pca_dataframe = df_pca, variance_dataframe = df_variance, WA_only = TRUE, spec = "HST", pcA = "PC1", pcB = "PC2", xstep = 2, ystep = 2, pal = pal_PCA)
-
-design <- "12\n34"
-
-plot_pca_wa <- ala_pc_1_2 + hma_pc_1_2 + hst_pc_1_2 + guide_area() +
+plot_pca_wa <- (pca_plots$ALA$wa + pca_plots$HST$wa + pca_plots$HMA$wa + guide_area()) +
     plot_layout(
         design = design,
         guides = "collect",
         axes = "collect"
-    ) &
+    ) +
     plot_annotation(tag_levels = 'A') &
     guides(colour = guide_legend(ncol = 2, override.aes = list(size = 3))) &
     theme(plot.tag = element_text(size = 14, face = "bold"))
@@ -472,18 +404,17 @@ We can see that the Shark Bay samples partition off in both *A. laevis* and
 
 ## STRUCTURE
 
-`STRUCTURE` plots are then generated for WA populations, specifically: Broome,
-Pilbara, Exmouth Gulf, Shark Bay and North Kimberley. In the PCAs above, samples
-from these populations typically cluster together, showing little structure.
-Consequently, we're using this method as a more granular approach to determine
-if there is any allele sharing between the populations.
+`STRUCTURE` analyses were run on the filtered VCF files for a range of `K` values
+for both all populations ($2\leq\text{K}\leq10$), and WA populations
+only ($2\leq\text{K}\leq5$).
 
 ```{r read-structure}
-structure_df <- fs::dir_ls(
-    here("results", "population-structure", "structure-all-updated"), 
+structure_df <- dir_ls(
+    here("results", "population-structure", "structure"), 
     glob = "*plot.csv", 
     recurse = TRUE
 ) |>
+    (\(x) set_names(x, str_remove(basename(x), "-burnin.*")))() |>
     map(\(x) {
         tmp <- x |>
             read_csv(col_names = TRUE, col_types = cols())
@@ -492,11 +423,12 @@ structure_df <- fs::dir_ls(
             pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
             mutate(partition = as.numeric(partition) + 1) |>
             rename(sample = `...1`) |>
-            left_join(pops) |>
-            left_join(popmap_lat_long)
+            left_join(pops, by = join_by(sample)) |>
+            left_join(popmap_lat_long, by = join_by(sample))
     }) |>
-    bind_rows() |>
+    list_rbind(names_to = "condition") |>
     mutate(
+        condition = ifelse(str_detect(condition, "all"),"All", "WA"),
         partition = forcats::fct_inorder(as.character(partition)),
         population = str_replace_all(population, "_", " "),
         # population = factor(population, levels = structure_pops),
@@ -505,15 +437,9 @@ structure_df <- fs::dir_ls(
     arrange(species, longitude) |>
     mutate(
         sample = forcats::fct_inorder(sample),
-        population = forcats::fct_inorder(population)
+        population = forcats::fct_inorder(population),
+        K = factor(K, levels = paste0("K", 2:10))
     )
-
-# Custom ordering of colour palette
-# pal <- c(
-#     "#ff595e", "#ffca3a", "#8ac926", "#1982c4"
-# )
-pal <- c("#1982c4", "#1982c480", "#1982c440", "#1982c410")
-names(pal) <- 1:4
 ```
 
 ### Choosing the correct K (N-ancestral populations)
@@ -529,14 +455,20 @@ indicate greater change in the model fit.
 The results for the three species are shown below.
 
 ```{r}
-etable <- fs::dir_ls(
-    here("results", "population-structure", "structure-all-updated"), 
+etable <- dir_ls(
+    here("results", "population-structure", "structure"), 
     glob = "*etable.csv",
     recurse = TRUE
 ) |>
     read_csv(col_names = TRUE, col_types = cols(), id = "species") |>
-    mutate(species = str_remove(basename(species), "-.*")) |>
+    mutate(species = str_remove(basename(species), "-burnin.*")) |>
+    separate_wider_delim(cols = species, delim = "_", names = c("species", "condition")) |>
     rename(K = `...1`)
+
+max_estln <- etable |> 
+    group_by(species, condition) |>
+    arrange(desc(estLnProbMean)) |>
+    slice(1)
 
 etable |>
     gt(groupname_col = "species") |>
@@ -545,10 +477,9 @@ etable |>
         drop_trailing_zeros = TRUE
     ) |>
     fmt_number(
-        columns = 3:7,
+        columns = 5:9,
         n_sigfig = 4
-    ) |>
-    as_raw_html()
+    )
 ```
 
 Plotting the table above looks like the following.
@@ -558,23 +489,33 @@ prb <- etable |>
     ggplot(aes(x = K, y = estLnProbMean, colour = species)) +
     geom_point() +
     geom_line() +
+    geom_point(
+        data = max_estln,
+        aes(x = K, y = estLnProbMean),
+        colour = "black",
+        size = 3
+    ) +
     scale_y_continuous(
         name = "Estimated mean log-probability",
-        limits = c(-40000, 0),
-        breaks = seq(0, -40000, -5000),
+        breaks = scales::pretty_breaks(n = 10),
         labels = scales::label_number(style_negative = "minus")
     ) +
-    scale_x_continuous(breaks = seq(2, 9, 1))
+    scale_x_continuous(breaks = seq(2, 10, 1)) +
+    facet_wrap(vars(condition), scales = "free_x") +
+    scale_colour_brewer(palette = "Set1")
 
 dk <- etable |>
     ggplot(aes(x = K, y = deltaK, colour = species)) +
     geom_point() +
     geom_line() +
-    scale_x_continuous(breaks = seq(2, 9, 1)) +
+    scale_x_continuous(breaks = seq(2, 10, 1)) +
     scale_y_continuous(
         name = "Delta-K",
-        breaks = seq(0, 15, 1)
-    )
+        breaks = seq(0, 2, 0.25),
+        limits = c(0, 2)
+    ) +
+    facet_wrap(vars(condition), scales = "free_x") +
+    scale_colour_brewer(palette = "Set1")
 
 plot_models <- prb/dk +
     plot_layout(axes = "collect", guides = "collect")
@@ -592,542 +533,322 @@ invisible(dev.off())
 plot_models
 ```
 
-From the figures above, it looks like `K = 4` is the best model fit in *Aipysurus*
-*laevis* and *Hydrophis major*, while `K = 3` appears the be the best fit for
-*Hydrophis stokesii*.
-
 ### *Aipysurus laevis*
 
-```{r}
-pop_groups <- structure_df |>
-    filter(species == "ALA", K == "K4") |> 
-    select(sample, population, species) |>
-    distinct() |>
-    mutate(size = 1) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
+#### All populations
 
-plot_structure_ALA <- structure_df |>
-    filter(species == "ALA", K =="K4") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        limits = c(0, 1.001),
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) +
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
+The `estLnMeanProb` and `Delta-K` values don't quite coincide. We know from the
+PCA there are five broad groups (which matches the `estLnMeanProb` value), even
+though the `Delta-K` value suggests $\text{K}=3$ is where there is the biggest
+rate of change. Granted, other `K` values show some significant peaks and
+troughs.
 
-plot_structure_ALA <- pop_groups / plot_structure_ALA +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
+Plotting $\text{K}=3$
+
+```{r ALA-STRUCTURE-ALL-K3}
+ala_structure_all_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "ALA", 
+    k = "K3", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+ala_structure_all_k3
+```
+
+And plotting $\text{K}=5$ as in the PCA.
+
+```{r ALA-STRUCTURE-ALL}
+ala_structure_all_k5 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "ALA", 
+    k = "K5", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-ALA.png"),
+    filename = here("results", "population-structure", "structure-ALA_All-K5.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
     res = 150
 )
-plot_structure_ALA
+ala_structure_all_k5
 invisible(dev.off())
 
-plot_structure_ALA
+ala_structure_all_k5
+```
+
+#### WA populations
+
+From the PCA, we can see that Shark Bay samples appear to cluster separately to
+the rest of the WA populations. The $\text{K} = 3$ model shows the highest `Delta-K`,
+however, it really looks like there are two populations - Shark Bay and the rest.
+
+When we plot $\text{K} = 2$, there's not really any discernable difference bewteen
+Shark Bay and the remaining populations.
+
+```{r ALA-STRUCTURE-WA-K2}
+ala_structure_wa_k2 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "ALA", 
+    k = "K2", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+ala_structure_wa_k2
+```
+
+When we plot $\text{K} = 3$, we can see that the Shark Bay samples have a larger
+portion of $\text{K} = 1$ than the other populations.
+
+```{r ALA-STRUCTURE-WA-K3}
+ala_structure_wa_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "ALA", 
+    k = "K3", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+ala_structure_wa_k3
+```
+
+This unique population portion is even more evident when plotting $\text{K} = 4$
+
+```{r ALA-STRUCTURE-WA-K4}
+ala_structure_wa_k4 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "ALA", 
+    k = "K4", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-ALA_WA-K4.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+ala_structure_wa_k4
+invisible(dev.off())
+
+ala_structure_wa_k4
 ```
 
 ### *Hydrophis major*
 
-```{r}
-pop_groups <- structure_df |>
-    filter(species == "HMA", K == "K4") |> 
-    select(sample, population, species) |>
-    distinct() |>
-    mutate(size = 1) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
+#### All populations
 
-plot_structure_HMA <- structure_df |>
-    filter(species == "HMA", K == "K4") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        limits = c(0, 1.001),
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.5,
-            size = 14,
-            angle = 45
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
+The PCA for *H. major* indicates that there could be five broad populations
+of snake. The `Delta-K` peak for *H. major* is $\text{K}=3$, though there is
+a second peak at $\text{K}=5$ with a significant drop-off after this.
 
-plot_structure_HMA <- pop_groups / plot_structure_HMA +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
+```{r HMA-STRUCTURE-ALL-K3}
+hma_structure_all_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HMA", 
+    k = "K3", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+hma_structure_all_k3
+```
+
+Increasing to $\text{K}=5$ highlights the unique population structure of Shark
+Bay, in addition to samples in the Gulf of Carpentaria and South Queensland.
+
+```{r HMA-STRUCTURE-ALL-K5}
+hma_structure_all_k5 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HMA", 
+    k = "K5", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HMA.png"),
+    filename = here("results", "population-structure", "structure-HMA_All-K5.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
     res = 150
 )
-plot_structure_HMA
+hma_structure_all_k5
 invisible(dev.off())
 
-plot_structure_HMA
+hma_structure_all_k5
+```
+
+#### WA populations
+
+The peak `estLnMeanProb` peaks at $\text{K}=3$, while `Delta-K` shows peaks
+at $\text{K}=3$ and $\text{K}=4$, with a significant fall-off after the latter.
+
+The $\text{K}=3$ plot clearly shows Shark Bay as comprising unique population
+structure.
+
+```{r HMA-STRUCTURE-WA-K3}
+hma_structure_wa_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HMA", 
+    k = "K3", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+ragg::agg_png(
+    filename = here("results", "population-structure", "structure-HMA_WA-K3.png"),
+    width = 1500, 
+    height = 1000,
+    units = "px",  
+    res = 150
+)
+hma_structure_wa_k3
+invisible(dev.off())
+
+hma_structure_wa_k3
+```
+
+Increasing $\text{K}=4$ results in two Shark Bay samples having a significant
+portion of a unique population `K=3`.
+
+```{r HMA-STRUCTURE-WA-K4}
+hma_structure_wa_k4 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HMA", 
+    k = "K4", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+hma_structure_wa_k4
 ```
 
 ### *Hydrophis stokesii*
 
-```{r}
-pop_groups <- structure_df |>
-    filter(species == "HST", K == "K3") |> 
-    select(sample, population, species) |>
-    distinct() |>
-    mutate(size = 1) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
+#### All populations
 
-plot_structure_HST <- structure_df |>
-    filter(species == "HST", K == "K3") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        limits = c(0, 1.001),
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.1,
-            vjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
+STRUCTURE models that there is likely between 3-5 genetic groups in *H. stokesii*.
 
-plot_structure_HST <- pop_groups / plot_structure_HST +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
+```{r HST-STRUCTURE-ALL-K3}
+hst_structure_all_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K3", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+hst_structure_all_k3
+```
+
+```{r HST-STRUCTURE-ALL-K4}
+hst_structure_all_k4 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K4", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
+
+hst_structure_all_k4
+```
+
+```{r HST-STRUCTURE-ALL-K5}
+hst_structure_all_k5 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K5", 
+    cond = "All", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HST.png"),
+    filename = here("results", "population-structure", "structure-HST_All-K5.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
     res = 150
 )
-plot_structure_HST
+hst_structure_all_k5
 invisible(dev.off())
 
-plot_structure_HST
+hst_structure_all_k5
 ```
 
-## STRUCTURE: WA coast samples
+#### WA populations
 
-```{r}
-structure_df_wa <- fs::dir_ls(
-    here("results", "population-structure", "structure-wa"), 
-    glob = "*plot.csv", 
-    recurse = TRUE
-) |>
-    map(\(x) {
-        tmp <- x |>
-            read_csv(col_names = TRUE, col_types = cols())
-        tmp |>
-            mutate(K = glue::glue("K{ncol(tmp) - 1}")) |>
-            pivot_longer(names_to = "partition", values_to = "proportion", 2:ncol(tmp)) |>
-            mutate(partition = as.numeric(partition) + 1) |>
-            rename(sample = `...1`) |>
-            left_join(pops) |>
-            left_join(popmap_lat_long)
-    }) |>
-    bind_rows() |>
-    mutate(
-        partition = forcats::fct_inorder(as.character(partition)),
-        population = str_replace_all(population, "_", " "),
-        population = factor(pop, levels = wa_pops),
-        .by = K
-    ) |>
-    arrange(species, longitude) |>
-    mutate(sample = forcats::fct_inorder(sample))
+Interestingly, `Delta-K` and `estLnMeanProb` values suggest there are three
+population groups in *H. stokesii* even though the PCA shows a homogeneous
+cluster.
 
-etable_wa <- fs::dir_ls(
-    here("results", "population-structure", "structure-wa"), 
-    glob = "*etable.csv",
-    recurse = TRUE
-) |>
-    read_csv(col_names = TRUE, col_types = cols(), id = "species") |>
-    mutate(species = str_remove(basename(species), "-.*")) |>
-    rename(K = `...1`)
-```
+Plotting $\text{K}=2$ - $\text{K}=4$ illustrates that STRUCTURE seems to simply
+be overfitting and making population groups when there are none. 
 
-### Choosing the correct K (N-ancestral populations)
-
-```{r}
-prb_wa <- etable_wa |>
-    ggplot(aes(x = K, y = estLnProbMean, colour = species)) +
-    geom_point() +
-    geom_line() +
-    scale_y_continuous(
-        name = "Estimated mean log-probability",
-        # limits = c(-40000, 0),
-        # breaks = seq(0, -40000, -5000),
-        labels = scales::label_number(style_negative = "minus")
-    ) +
-    scale_x_continuous(breaks = seq(2, 9, 1))
-
-dk_wa <- etable_wa |>
-    ggplot(aes(x = K, y = deltaK, colour = species)) +
-    geom_point() +
-    geom_line() +
-    scale_x_continuous(breaks = seq(2, 9, 1)) +
-    scale_y_continuous(
-        name = "Delta-K",
-        breaks = seq(0, 15, 1)
-    )
-
-plot_models_wa <- prb_wa/dk_wa +
-    plot_layout(axes = "collect", guides = "collect")
-
-plot_models_wa
-```
-
-### *Aipysurus laevis*
-
-```{r}
-pop_groups <- structure_df_wa |>
-    filter(species == "ALA", K == "K3") |> 
-    select(sample, population = pop, species) |>
-    distinct() |>
-    mutate(
-        size = 1,
-        population = str_replace_all(population, "_", " ")
-    ) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
-
-plot_structure_ALA_wa <- structure_df_wa |>
-    filter(species == "ALA", K == "K3") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.1,
-            vjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-
-plot_structure_ALA_wa <- pop_groups / plot_structure_ALA_wa +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
+```{r HST-STRUCTURE-WA-K2}
+hst_structure_wa_k2 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K2", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
+)
 
 ragg::agg_png(
-    filename = here("results", "population-structure", "structure-ALA-WA.png"),
+    filename = here("results", "population-structure", "structure-HST_WA-K2.png"),
     width = 1500, 
     height = 1000,
     units = "px",  
     res = 150
 )
-plot_structure_ALA_wa
+hst_structure_wa_k2
 invisible(dev.off())
 
-plot_structure_ALA_wa
+hst_structure_wa_k2
 ```
 
-### *Hydrophis major*
-
-```{r}
-pop_groups <- structure_df_wa |>
-    filter(species == "HMA", K == "K3") |> 
-    select(sample, population = pop, species) |>
-    distinct() |>
-    mutate(
-        size = 1,
-        population = str_replace_all(population, "_", " ")
-    ) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
-
-plot_structure_HMA_wa <- structure_df_wa |>
-    filter(species == "HMA", K == "K3") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.1,
-            vjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-
-plot_structure_HMA_wa <- pop_groups / plot_structure_HMA_wa +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
-
-ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HMA-WA.png"),
-    width = 1500, 
-    height = 1000,
-    units = "px",  
-    res = 150
+```{r HST-STRUCTURE-WA-K3}
+hst_structure_wa_k3 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K3", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
 )
-plot_structure_HMA_wa
-invisible(dev.off())
-
-plot_structure_HMA_wa
 ```
 
-### *Hydrophis stokesii*
-
-
-```{r}
-pop_groups <- structure_df_wa |>
-    filter(species == "HST", K == "K3") |> 
-    select(sample, population = pop, species) |>
-    distinct() |>
-    mutate(
-        size = 1,
-        population = str_replace_all(population, "_", " ")
-    ) |>
-    ggplot(aes(x = sample, y = size, fill = population)) +
-    geom_col(width = 1) +
-    scale_fill_manual(values = pal_PCA) +
-    scale_y_continuous(expand = c(0,0)) +
-    labs(x = NULL) + 
-    theme(
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-    ) +
-    theme(
-        legend.position = "top",
-        legend.title = element_blank()
-    )
-
-plot_structure_HST_wa <- structure_df_wa |>
-    filter(species == "HST", K == "K3") |>
-    ggplot(aes(x = sample, y = proportion, fill = partition)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = pal) +
-    scale_y_continuous(
-        breaks = c(0, 0.5, 1),
-        labels = as.character(seq(0, 1, 0.5)),
-        expand = c(0, 0)
-    ) +
-    labs(x = NULL) + 
-    guides(fill = guide_legend(title.position = "bottom")) +
-    theme(
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.98),
-        legend.position = "bottom",
-        legend.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(
-            face = "bold", 
-            hjust = 0.1,
-            vjust = 0.5,
-            size = 14,
-            angle = 90
-        ),
-        strip.text.y = element_text(size = 14, hjust = 0.5),
-        strip.background = element_rect(fill='transparent', colour = NA),
-        panel.spacing.x = unit(0.4, "line"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
-    )
-
-plot_structure_HST_wa <- pop_groups / plot_structure_HST_wa +
-    plot_layout(heights = c(1,4), axes = "collect") &
-    theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-    )
-
-ragg::agg_png(
-    filename = here("results", "population-structure", "structure-HST-WA.png"),
-    width = 1500, 
-    height = 1000,
-    units = "px",  
-    res = 150
+```{r HST-STRUCTURE-WA-K4}
+hst_structure_wa_k4 <- my_plot_structure(
+    dat = structure_df, 
+    spec = "HST", 
+    k = "K4", 
+    cond = "WA", 
+    pal_pop = PAL, 
+    pal_k = PALST
 )
-plot_structure_HST_wa
-invisible(dev.off())
-
-plot_structure_HST_wa
 ```
 
-# Isolation by Distance (IBD)
+## Isolation by Distance (IBD)
 
 Lastly, we'll perform Isolation-by-distance analysis. We'll first load the VCF
 data and estimate the genetic distance matrix (Nei's genetic distance).
@@ -1145,59 +866,52 @@ source(here("scripts", "snpR-edited.R"))
 
 # Load updated lat/long popmaps
 set.seed(123)
-meta_latLong <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
-    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
-    purrr::map(\(x) {
-        x |>
-            read_csv(col_types = cols()) |>
-            select(species, id, targetid, pop, latitude, longitude) |>
-            unite(col = "sampID", sep = "-", species, id, targetid) |>
-            filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove) |>
-            select(sampID, pop, x = longitude, y = latitude) |>
-            # For snakes with identical long/lat + population, choose one at random
-            slice_sample(n = 1, by = c(pop, x, y))
-    })
+meta_latLong <- popmap_lat_long |>
+    mutate(pop = str_replace_all(pop, "_", " ")) |>
+    filter(pop %in% wa_pops, !is.na(latitude), !is.na(longitude)) |>
+    select(sampID = sample, pop, y = latitude, x = longitude) |>
+    mutate(
+        pop = str_replace_all(pop, " ", "_"),
+        species = case_when(
+            str_starts(sampID, "HMA") ~ "HMA",
+            str_starts(sampID, "HST") ~ "HST",
+            .default = "ALA"
+        ),
+        .before = sampID
+    )
+
+meta_latLong <- split(meta_latLong, meta_latLong$species)
 
 # Load the VCF files as snpR data objects
 vcfs <- fs::dir_ls(
-    here("results", "ipyrad"),
-    glob = "*stringent.vcf.gz",
+    here("results", "variant-filtering"),
+    glob = "*vcf.gz",
     recurse = TRUE
 ) |>
-    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    (\(x) x[str_detect(x, "HST-ld", negate = TRUE)])() |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
     imap(\(v,i) {
-        filter_val <- case_when(
-            i == "ALA" ~ 0.9, 
-            i == "HMA" ~ 0.9, 
-            i == "HST" ~ 0.95
-        )
         tmp_vcf <- read_vcf(file = v)
         
-        filt_vcf <- filter_snps(
-            tmp_vcf,
-            min_ind = filter_val,
-            re_run = "full"
-        )
-        
         # Subset for samples to keep + add in metadata
-        filt_vcf <- subset_snpR_data(
-            x = filt_vcf, 
+        tmp_vcf <- subset_snpR_data(
+            x = tmp_vcf, 
             .facets = "sampID",
             .subfacets = meta_latLong[[i]]$sampID
         )
         
-        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong[[i]])
+        sample.meta(tmp_vcf) <- left_join(sample.meta(tmp_vcf), meta_latLong[[i]])
         
-        filt_vcf <- custom_calc_genetic_distances(
-            filt_vcf, 
+        tmp_vcf <- custom_calc_genetic_distances(
+            tmp_vcf, 
             facets = c("sampID", "pop"), 
             method = "Nei"
         )
-        filt_vcf
+        tmp_vcf
     })
 ```
 
-## Mantel statistics and spatial auto-correlation
+### Mantel statistics and spatial auto-correlation
 
 Next we'll perform the Mantel tests and generate the autocorrelation plots. We're
 using `vegan` to perform Mantel tests as this package has the autocorrelation
@@ -1210,8 +924,8 @@ mantel_results <- vcfs |>
         genMat <- get.snpR.stats(x, facets = "sampID", stats = "genetic_distance")
         genMat <-as.matrix(genMat$sampID$.base$Nei)
         
-        lat_long <- meta_latLong[[i]] |>
-            select(3, 4)
+        lat_long <- sample.meta(x) |>
+            select(x, y)
         
         if(i == "ALA") {
             WAcoast <- getNOAA.bathy(
@@ -1239,30 +953,30 @@ mantel_results <- vcfs |>
         lcDist <- lc.dist(transMat, lat_long, res = "dist")
         lcDist <- as.matrix(lcDist)
         
-        rownames(lcDist) <- meta_latLong[[i]]$sampID
-        colnames(lcDist) <- meta_latLong[[i]]$sampID
-        
+        rownames(lcDist) <- sample.meta(x)$sampID
+        colnames(lcDist) <- sample.meta(x)$sampID
+
         # Arrange geographic distance matrix by genetic distance matrix
         lcDist <- lcDist[rownames(genMat), colnames(genMat)]
-        
+
         # Grouping data into 200km bins - increases amount of data for correlation
         geo_vect <- lcDist[lower.tri(lcDist)]
         geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 200))
         classes <- seq(0, round( (max(lcDist, na.rm = TRUE) + 50), digits = -2 ), 200)
-        
+
         # Example of running the Mantel statistic using vegan
         output.mantel <- vegan::mantel(
             as.dist(genMat),
             as.dist(lcDist),
             permutations = 10000
         )
-        
+
         output.mantel.summary <- tibble(
             "Observed correlation" = output.mantel$statistic,
             "Significance" = output.mantel$signif,
             "Replicates" = output.mantel$permutations
         )
-        
+
         # Correlog analysis - binned data
         output.mantel.correlog <- vegan::mantel.correlog(
             D.eco = as.dist(genMat),
@@ -1272,7 +986,7 @@ mantel_results <- vcfs |>
             progressive = TRUE,
             cutoff = FALSE
         )
-        
+
         list(
             "mantel" = output.mantel.summary,
             "correlog" = output.mantel.correlog,
@@ -1298,14 +1012,14 @@ mantel_results |>
     as_raw_html()
 ```
 
-## IBD visualisation
+### IBD visualisation
 
 ### Geographic distance vs Genetic distance
 
 Lastly, let's generate a scatter plot of distance vs genetic distance. Add the
 correlation coefficients and p-values in Inkscape or something.
 
-```{r}
+```{r IBD-correlation-plot}
 df_gen_geo <- mantel_results |>
     imap(\(x, i) {
         genDist <- x[["genetic_dist"]]
@@ -1347,15 +1061,13 @@ plot_scatter <- df_gen_geo |>
     geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
     scale_x_continuous(
         name = "Distance (Km)",
-        breaks = seq(0, 1600, 200),
-        labels = as.character(seq(0, 1600, 200)),
+        breaks = scales::pretty_breaks(n = 10),
+        labels = scales::label_number(big.mark = ","),
         expand = c(0.01, 0, 0.02, 0)
     ) +
     scale_y_continuous(
         name = "Genetic distance (Nei)",
-        breaks = seq(0, 0.055, 0.005),
-        labels = as.character(seq(0, 0.055, 0.005)),
-        limits = c(0, 0.055),
+        breaks = scales::pretty_breaks(n = 10),
         expand = c(0.02, 0)
     ) +
     scale_colour_brewer(palette = "Set1") +
@@ -1380,7 +1092,7 @@ plot_scatter
 
 ### Spatial auto-correlation
 
-```{r}
+```{r IBD-spatial-auto-correlation}
 plots <- mantel_results |>
     purrr::imap(\(x, i) {
         spc <- case_when(
@@ -1459,56 +1171,38 @@ plot_correlog
 
 ### Without Shark Bay samples
 
-```{r}
-meta_latLong_no_SB <- fs::dir_ls(here("data", "IBD-popmaps"), glob = "*avg.csv") |>
-    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |> 
+```{r Load-VCF-no-SB}
+meta_latLong_no_SB <- meta_latLong |>
     purrr::map(\(x) {
         x |>
-            read_csv(col_types = cols()) |>
-            select(species, id, targetid, pop, latitude, longitude) |>
-            unite(col = "sampID", sep = "-", species, id, targetid) |>
-            filter(!is.na(latitude), pop %in% wa_pops, ! sampID %in% samples_remove, pop != "Shark_Bay") |>
-            select(sampID, pop, x = longitude, y = latitude) |>
-            # For snakes with identical long/lat + population, choose one at random
-            slice_sample(n = 1, by = c(pop, x, y))
+            filter(pop != "Shark_Bay")
     })
 
 # Load the VCF files as snpR data objects
 vcfs_no_SB <- fs::dir_ls(
-    here("results", "ipyrad"),
-    glob = "*stringent.vcf.gz",
+    here("results", "variant-filtering"),
+    glob = "*vcf.gz",
     recurse = TRUE
 ) |>
-    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    (\(x) x[str_detect(x, "HST-ld", negate = TRUE)])() |>
+    (\(x) set_names(x, str_remove(basename(x), "-.*")))() |>
     imap(\(v,i) {
-        filter_val <- case_when(
-            i == "ALA" ~ 0.9, 
-            i == "HMA" ~ 0.9, 
-            i == "HST" ~ 0.95
-        )
         tmp_vcf <- read_vcf(file = v)
-        
-        filt_vcf <- filter_snps(
-            tmp_vcf,
-            min_ind = filter_val,
-            re_run = "full"
-        )
-        
         # Subset for samples to keep + add in metadata
-        filt_vcf <- subset_snpR_data(
-            x = filt_vcf, 
+        tmp_vcf <- subset_snpR_data(
+            x = tmp_vcf, 
             .facets = "sampID",
             .subfacets = meta_latLong_no_SB[[i]]$sampID
         )
         
-        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta_latLong_no_SB[[i]])
+        sample.meta(tmp_vcf) <- left_join(sample.meta(tmp_vcf), meta_latLong_no_SB[[i]])
         
-        filt_vcf <- custom_calc_genetic_distances(
-            filt_vcf, 
+        tmp_vcf <- custom_calc_genetic_distances(
+            tmp_vcf, 
             facets = c("sampID", "pop"), 
             method = "Nei"
         )
-        filt_vcf
+        tmp_vcf
     })
 ```
 
@@ -1518,8 +1212,8 @@ mantel_results_no_SB <- vcfs_no_SB |>
         genMat <- get.snpR.stats(x, facets = "sampID", stats = "genetic_distance")
         genMat <-as.matrix(genMat$sampID$.base$Nei)
         
-        lat_long <- meta_latLong_no_SB[[i]] |>
-            select(3, 4)
+        long_lat <- sample.meta(x) |>
+            select(x, y)
         
         if(i == "ALA") {
             WAcoast <- getNOAA.bathy(
@@ -1544,11 +1238,11 @@ mantel_results_no_SB <- vcfs_no_SB |>
         }
         
         transMat <- trans.mat(WAcoast) 
-        lcDist <- lc.dist(transMat, lat_long, res = "dist")
+        lcDist <- lc.dist(transMat, long_lat, res = "dist")
         lcDist <- as.matrix(lcDist)
         
-        rownames(lcDist) <- meta_latLong_no_SB[[i]]$sampID
-        colnames(lcDist) <- meta_latLong_no_SB[[i]]$sampID
+        rownames(lcDist) <- sample.meta(x)$sampID
+        colnames(lcDist) <- sample.meta(x)$sampID
         
         # Arrange geographic distance matrix by genetic distance matrix
         lcDist <- lcDist[rownames(genMat), colnames(genMat)]
@@ -1570,7 +1264,7 @@ mantel_results_no_SB <- vcfs_no_SB |>
             "Significance" = output.mantel$signif,
             "Replicates" = output.mantel$permutations
         )
-        
+
         # Correlog analysis - binned data
         output.mantel.correlog <- vegan::mantel.correlog(
             D.eco = as.dist(genMat),
@@ -1649,15 +1343,13 @@ plot_scatter_no_SB <- df_gen_geo_no_SB |>
     geom_smooth(mapping = aes(colour = species), method = "lm", show.legend = FALSE) +
     scale_x_continuous(
         name = "Distance (Km)",
-        breaks = seq(0, 1600, 200),
-        labels = as.character(seq(0, 1600, 200)),
+        breaks = scales::pretty_breaks(n = 10),
+        labels = scales::label_number(big.mark = ","),
         expand = c(0.01, 0, 0.02, 0)
     ) +
     scale_y_continuous(
         name = "Genetic distance (Nei)",
-        breaks = seq(0, 0.055, 0.005),
-        labels = as.character(seq(0, 0.055, 0.005)),
-        limits = c(0, 0.055),
+        breaks = scales::pretty_breaks(n = 10),
         expand = c(0.02, 0)
     ) +
     scale_colour_brewer(palette = "Set1") +
