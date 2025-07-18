@@ -84,6 +84,8 @@ samples_remove <- c(
     "HMA-SS170812_01-2117751", "HMA-WAM-R154980-2562264", "HST-KLS1688-4013428"
 )
 
+write_lines(samples_remove, file = here("data", "samples-remove.txt"))
+
 # Run information
 run_info <- fs::dir_ls(
     here("data", "sample-sheets"),
