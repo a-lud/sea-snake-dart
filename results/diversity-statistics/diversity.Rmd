@@ -7,12 +7,26 @@ output:
 ---
 
 This directory contains results relating to diversity statistics, both within
-and between populations. The statistics are generated from the unfiltered
-`Ipyrad` VCFs, with all filtering being applied by the package `snpR`.
+and between populations. The statistics are generated from the filtered VCF files
+which have had the following filters applied:
+
+- MAF$\leq$0.01
+- LD $\leq$0.3
+- For *H. stokesii* (WA), SNPs with PC1 loadings $\geq$ 0.04 (PC1 = batch effects)
+
+Based off the PCA analyses, we're going to regroup some samples. Specifically,
+all WA coastline samples *except* Shark Bay are going to be clustered into
+"Coastal WA". Additionally, offshore reef samples are grouped as "Offshore WA".
+
+Note that we've also removed the North and South QLD samples, as there aren't
+many individuals in these groups and we're not certain of the structure in these
+Eastern populations. As such, we're just keeping the well sampled Gulf of
+Carpentaria population where available.
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-    echo = TRUE, message = FALSE,
+    echo = FALSE, message = FALSE,
     warning = FALSE, error = FALSE,
     out.width = "100%", fig.width = 12, fig.height = 12
 )
@@ -23,19 +37,13 @@ suppressPackageStartupMessages({
     library(here)
     library(gt)
     library(patchwork)
+    library(fs)
 })
 
 # Source custom genetic distance function
 source(here("scripts", "snpR-edited.R"))
 
-# Problem samples to remove 
-samples_remove <- read_tsv(
-    here("data", "popmaps", "dropped-samples.tsv"), 
-    skip = 1, 
-    col_names = c("sample", "pop"),
-    col_types = cols()
-) |>
-    pull(sample)
+samples_remove <- read_lines(here("data", "samples-remove.txt"))
 
 theme_set(theme_bw())
 
@@ -45,28 +53,15 @@ pop_levels <- c(
     "Shark_Bay", "Coastal_WA", "Offshore_WA", 
     "Gulf_of_Carpentaria", "New_Caledonia"
 )
-```
 
-## Load metadata and VCF files
-
-Here we're simply loading the population-map files and storing them into the
-object `meta`. This object is a named `list`, where each list element is a
-dataframe.
-
-Note that we're going to remove the North and South QLD samples, as there aren't
-many individuals in these groups and we're not certain of the structure in these
-Eastern populations. As such, we're just keeping the well sampled Gulf of
-Carpentaria population where available.
-
-```{r load-meta}
 # Load data
 meta <- fs::dir_ls(
     here("data", "popmaps"),
     glob = "*.txt"
 ) |>
     (\(x) set_names(x, str_remove(basename(x), "-.*")))() |>
-    map(\(x) {
-        x |>
+    imap(\(x, i) {
+        tmp <- x |>
             read_delim(
                 delim = " ", 
                 col_names = c("sampID", "population"), 
@@ -76,20 +71,10 @@ meta <- fs::dir_ls(
                 ! str_detect(population, "QLD"), 
                 ! sampID %in% samples_remove
             )
-    })
-```
-
-### Adapting metadata
-
-Based off the PCA analyses, we're going to regroup some samples. Specifically,
-all WA coastline samples *except* Shark Bay are going to be clustered into
-"Coastal WA". Additionally, offshore reef samples are grouped as "Offshore WA".
-
-```{r regroup-samples}
-meta <- meta |>
-    imap(\(x, i) {
+        
+        # Regroup
         if(i == "ALA") {
-            x <- x |>
+            tmp <- tmp |>
                 mutate(
                     pop = case_when(
                         population %in% c("Broome", "Pilbara", "Exmouth_Gulf") ~ "Coastal_WA",
@@ -100,7 +85,7 @@ meta <- meta |>
         }
         
         if(i == "HMA") {
-            x <- x |>
+            tmp <- tmp |>
                 mutate(
                     pop = case_when(
                         population %in% c("Broome", "Pilbara", "Exmouth_Gulf") ~ "Coastal_WA",
@@ -110,7 +95,7 @@ meta <- meta |>
         }
         
         if(i == "HST") {
-            x <- x |>
+            tmp <- tmp |>
                 mutate(
                     pop = case_when(
                         population %in% c("Broome", "Pilbara", "Exmouth_Gulf", "North_Kimberley") ~ "Coastal_WA",
@@ -120,7 +105,7 @@ meta <- meta |>
                 )
         }
         
-        return(x)
+        return(tmp)
     })
 ```
 
@@ -134,47 +119,40 @@ We also apply some sample filtering (i.e. removing QLD samples from snpRobject)
 and add in the metadata after loading the data. This is to ensure the correct
 metadata is assigned to the right sample.
 
-```{r load-vcfs, results='hide'}
+```{r load-vcfs, results='hide', echo=TRUE}
 # Get each species' VCF file
 vcfs <- fs::dir_ls(
-    here("results", "ipyrad"),
-    glob = "*stringent.vcf.gz",
-    recurse = TRUE
+    here("results", "variant-filtering"),
+    glob = "*vcf.gz"
 ) |>
-    (\(x) set_names(x, str_remove(basename(x), "-stringent.*")))() |>
+    (\(x) x[str_detect(x, "wa-", negate = TRUE)])() |>
+    (\(x) set_names(x, str_remove(basename(x), "-ld.*")))() |>
     imap(\(v,i) {
         tmp_vcf <- read_vcf(file = v)
         
-        filt_vcf <- filter_snps(
-            tmp_vcf,
-            min_ind = 0.75,
-            re_run = "full"
-        )
-        
         # Subset for samples to keep + add in metadata
-        filt_vcf <- subset_snpR_data(
-            x = filt_vcf, 
+        tmp_vcf <- subset_snpR_data(
+            x = tmp_vcf, 
             .facets = "sampID",
             .subfacets = meta[[i]]$sampID
         )
         
-        sample.meta(filt_vcf) <- left_join(sample.meta(filt_vcf), meta[[i]]) |>
+        sample.meta(tmp_vcf) <- left_join(sample.meta(tmp_vcf), meta[[i]]) |>
             mutate(pop = factor(pop, levels = pop_levels))
-        filt_vcf
+        tmp_vcf
     })
 ```
 
-## Calculate statistics
+## Calculate within and between population diversity statistics
 
 Next we'll calculate a range of diversity statistics. The program `snpR` has a
 really convenient function `calc_basic_snp_stats()` which practically estimates
 all the statistics we want.
 
-Below we estimate π, H~o~, H~e~, F~IS~, HWE and pairwise F~ST~. We estimate
+Below we estimate π, H~o~, H~e~, F~IS~, HWE and pair wise F~ST~. We estimate
 all statistics by population.
 
 ```{r calc-basic-stats}
-## WA all
 # Calculate within population statistics
 stats_within <- vcfs |>
     map(\(v) {
@@ -190,65 +168,11 @@ stats_between <- vcfs |>
     })
 ```
 
-### Calculate 
-
-We used a separate program to calculate nucleotide diversity (π) in each population.
-This program is `pixy`, which uses invariant data in its calculation in addition
-to variant sites. The authors of `Ipyrad` wrote a script that can return an
-**all-sites** VCF file from the `.loci` files. I've passed this VCF to `pixy` to
-get a more accurate estimation of π in each population.
-
-```{r}
-pixy_pi <- fs::dir_ls(
-    here("results"),
-    glob = "*pi.txt",
-    recurse = TRUE
-) |>
-    read_tsv(col_types = cols(), id = "species") |>
-    rename(population = pop) |>
-    filter(!str_detect(population, "QLD")) |>
-    mutate(
-        species = str_remove(basename(species), "_.*"),
-        pop = NA_character_,
-        pop = case_when(
-            species == "ALA" & population %in% c("Broome", "Pilbara", "Exmouth_Gulf") ~ "Coastal_WA",
-            species == "ALA" & population == "Shark_Bay" ~ "Shark_Bay",
-            species == "ALA" & population %in% c("Ashmore", "Heywood_Shoal", "Scott_Reef") ~ "Offshore_WA",
-            species == "ALA" & population == "Gulf_of_Carpentaria" ~ "Gulf_of_Carpentaria",
-            species == "ALA" & population == "New_Caledonia" ~ "New_Caledonia",
-            .default = pop
-        ),
-        pop = case_when(
-            species == "HMA" & population %in% c("Broome", "Pilbara", "Exmouth_Gulf") ~ "Coastal_WA",
-            species == "HMA" & population == "Shark_Bay" ~ "Shark_Bay",
-            species == "HMA" & population =="Gulf_of_Carpentaria" ~ "Gulf_of_Carpentaria",
-            species == "HMA" & population == "New_Caledonia" ~ "New_Caledonia",
-            .default = pop
-        ),
-        pop = case_when(
-            species == "HST" & population %in% c("Broome", "Pilbara", "Exmouth_Gulf", "North_Kimberley") ~ "Coastal_WA",
-            species == "HST" & population %in% c("Ashmore", "Heywood_Shoal") ~ "Offshore_WA",
-            species == "HST" & population == "Gulf_of_Carpentaria" ~ "Gulf_of_Carpentaria",
-            species == "HST" & population == "New_Caledonia" ~ "New_Caledonia",
-            .default = pop
-        )
-    ) |>
-    # Generating genome-wide averages
-    summarise(
-        pixy_pi = sum(count_diffs) / sum(count_comparisons),
-        .by = c(species, pop)
-    )
-```
-
-The π estimates are included in the next table.
-
 ## Within population statistics
 
 Below we simply extract the weighted averages for each population. The table
 contains four relevant columns - weighted means for nucleotide diversity, 
-observed heterozygosity, expected heterozygosity and F~IS~. I've appended the
-`pixy` π estimates to compare the impact of calculating nucleotide diversity with
-and without invariant data.
+observed heterozygosity, expected heterozygosity and F~IS~.
 
 ```{r within-statistics}
 # Number of samples in each subfacet
@@ -267,14 +191,12 @@ within <- stats_within |>
         }
     ) |>
     list_rbind(names_to = "species") |>
-    left_join(pixy_pi, by = join_by(species, subfacet == pop)) |>
     mutate(subfacet = factor(subfacet, levels = pop_levels)) |>
     select(
         Species = species,
         Population = subfacet,
         n_samples,
-        `Nuc. diversity (pixy)` = pixy_pi,
-        `Nuc. diversity (snpR)` = weighted_mean_pi,
+        `Nuc. diversity` = weighted_mean_pi,
         Ho = weighted_mean_ho, He  = weighted_mean_he,
         Fis = weighted_mean_fis,
         -facet
@@ -295,26 +217,19 @@ within |>
 within |>
     gt(groupname_col = "Species") |>
     fmt_number(
-        columns = 4:8,
-        n_sigfig = 2
+        columns = 4:7,
+        n_sigfig = 3
     ) |>
+    cols_align(align = "right", columns = "Population") |>
     as_raw_html()
 ```
-
-I've left the π calculation based on **just SNPs** in the table. We can see
-that the values are much higher than the `pixy` estimations.
 
 # Between population statistics
 
 Lastly we have our F~ST~ measures and Nei's genetic distance measures as heat maps.
 We need to manipulate the data a bit as the F~ST~ data don't include the diagonal.
 
-## Clean F~ST~ matrix
-
-Here I add in the missing row/column values from the F~ST~ matrix. We do this
-so we have a complete matrix with a diagonal.
-
-```{r}
+```{r mung-fst-nei, echo=TRUE}
 stats_within |>
     iwalk(\(x, i) {
         mat <- x |>
@@ -344,7 +259,10 @@ stats_within |>
 
 ## Combine F~ST~ and Nei's genetic distance data into single matrix
 
-```{r get-fst}
+We then manipulate the data a bit to get it to long-form so that we can plot
+it easily.
+
+```{r get-fst, echo=TRUE}
 df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
     
     # Grab Nei genetic distance matrix
@@ -392,14 +310,7 @@ df_fst_nei <- map(c("ALA", "HMA", "HST"), \(id){
     list(new_long, new)
 }) |>
     set_names(c("ALA", "HMA", "HST"))
-```
 
-## Write pairwise distance results
-
-First we'll save the combined matrices to file, where upper triangle is F~ST~
-and the lower triangle is Nei's genetic distance
-
-```{r}
 # Write long form tables used for plotting
 df_fst_nei |>
     map(pluck, 1) |>
@@ -424,9 +335,7 @@ df_fst_nei |>
 
 ## Pairwise genetic distance heatmaps
 
-Next we'll write a helper function for plotting.
-
-```{r plot-heatmap}
+```{r plot-heatmap-function}
 plotHeatMap <- function(
         data,
         species,
@@ -472,9 +381,9 @@ plotHeatMap <- function(
             low = "#76c893", 
             high = "#1a759f",
             na.value = "grey95",
-            breaks = seq(0, 0.03, 0.005),
-            labels = as.character(seq(0, 0.03, 0.005)),
-            limits = c(0, 0.03)
+            breaks = seq(0, 0.05, 0.01),
+            labels = as.character(seq(0, 0.05, 0.01)),
+            limits = c(0, 0.05)
         ) +
         scale_x_discrete(expand = c(0,0)) +
         scale_y_discrete(expand = c(0,0)) +

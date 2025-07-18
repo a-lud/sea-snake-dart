@@ -4,46 +4,46 @@ Bay","Shark
 Bay",NA,diagonal
 "Shark
 Bay","Coastal
-WA",0.04365939214308679,upper
+WA",0.04809857137498557,upper
 "Shark
 Bay","Gulf of
-Carpentaria",0.08668940290645259,upper
+Carpentaria",0.09949630116772165,upper
 "Shark
 Bay","New
-Caledonia",0.25798706538214294,upper
+Caledonia",0.24077485067905954,upper
 "Coastal
 WA","Shark
-Bay",0.0060509684035438644,lower
+Bay",0.010135205802520891,lower
 "Coastal
 WA","Coastal
 WA",NA,diagonal
 "Coastal
 WA","Gulf of
-Carpentaria",0.032769608513289604,upper
+Carpentaria",0.03349826584416521,upper
 "Coastal
 WA","New
-Caledonia",0.18650460784816966,upper
+Caledonia",0.18758112007592076,upper
 "Gulf of
 Carpentaria","Shark
-Bay",0.010435232816423877,lower
+Bay",0.01738365837071306,lower
 "Gulf of
 Carpentaria","Coastal
-WA",0.004139389821556379,lower
+WA",0.006304285684188405,lower
 "Gulf of
 Carpentaria","Gulf of
 Carpentaria",NA,diagonal
 "Gulf of
 Carpentaria","New
-Caledonia",0.17118955462813584,upper
+Caledonia",0.18371282550140638,upper
 "New
 Caledonia","Shark
-Bay",0.024295186455157432,lower
+Bay",0.03532949482703558,lower
 "New
 Caledonia","Coastal
-WA",0.01823460399288081,lower
+WA",0.02929965913041554,lower
 "New
 Caledonia","Gulf of
-Carpentaria",0.01716042647385561,lower
+Carpentaria",0.028138032292543358,lower
 "New
 Caledonia","New
 Caledonia",NA,diagonal
