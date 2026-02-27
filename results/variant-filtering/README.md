@@ -1,7 +1,7 @@
 VCF filtering
 ================
 Alastair Ludington
-2025-07-18
+2026-02-27
 
 - [Problem samples](#problem-samples)
 - [Convert VCF to GDS](#convert-vcf-to-gds)
@@ -49,7 +49,7 @@ The following samples have been identified as significant outliers, not
 matching the rest of the samples in their population groups. These need
 to be manually investigated.
 
-<div id="vtpbthhedb" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="crhixyrsao" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -58,32 +58,31 @@ to be manually investigated.
     </tr>
   </thead>
   <tbody class="gt_table_body" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3;">
-    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Aipysurus laevis stub_1_1 stub_1" rowspan="2" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Aipysurus laevis</td>
-<td headers="Aipysurus laevis stub_1_1 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">ALA-AL401-3991432</td></tr>
-    <tr style="border-style: none;"><td headers="Aipysurus laevis Problem samples_2 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">ALA-AL404-3991435</td></tr>
-    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Hydrophis stokesii stub_1_3 stub_1" rowspan="13" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Hydrophis stokesii</td>
-<td headers="Hydrophis stokesii stub_1_3 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">HST-KLS0360-2562274</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_4 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0634-2892478</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_5 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0886-2892390</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_6 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1679-4013420</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_7 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1677-4013418</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_8 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0660-2892454</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_9 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0941-2892545</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_10 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0897-2892551</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_11 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0896-2892403</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_12 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1204-3593361</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_13 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-As012-3991487</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_14 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-As010-3991485</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis stokesii Problem samples_15 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1688-4013428</td></tr>
-    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Hydrophis major stub_1_16 stub_1" rowspan="5" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Hydrophis major</td>
-<td headers="Hydrophis major stub_1_16 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">HMA-VU46-2117754</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis major Problem samples_17 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170818_01-2117748</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis major Problem samples_18 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170814_02-2117746</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis major Problem samples_19 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170812_01-2117751</td></tr>
-    <tr style="border-style: none;"><td headers="Hydrophis major Problem samples_20 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-WAM-R154980-2562264</td></tr>
+    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Aipysurus laevis stub_2_1 stub_1" rowspan="2" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Aipysurus laevis</td>
+<td headers="Aipysurus laevis stub_2_1 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">ALA-AL401-3991432</td></tr>
+    <tr style="border-style: none;"><td headers="Aipysurus laevis stub_2_2 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">ALA-AL404-3991435</td></tr>
+    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Hydrophis stokesii stub_2_3 stub_1" rowspan="13" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Hydrophis stokesii</td>
+<td headers="Hydrophis stokesii stub_2_3 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">HST-KLS0360-2562274</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_4 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0634-2892478</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_5 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0886-2892390</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_6 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1679-4013420</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_7 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1677-4013418</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_8 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0660-2892454</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_9 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0941-2892545</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_10 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0897-2892551</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_11 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS0896-2892403</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_12 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1204-3593361</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_13 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-As012-3991487</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_14 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-As010-3991485</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis stokesii stub_2_15 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HST-KLS1688-4013428</td></tr>
+    <tr class="gt_row_group_first" style="border-style: none;"><td headers="Hydrophis major stub_2_16 stub_1" rowspan="5" class="gt_row gt_left gt_stub_row_group" style="border-style: none; padding-top: 8px; padding-bottom: 8px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; overflow-x: hidden; color: #333333; background-color: #FFFFFF; font-size: 100%; font-weight: initial; text-transform: inherit; border-right-style: solid; border-right-width: 2px; border-right-color: #D3D3D3; padding-left: 5px; padding-right: 5px; vertical-align: top; text-align: left; border-top-width: 2px;" bgcolor="#FFFFFF" valign="top" align="left">Hydrophis major</td>
+<td headers="Hydrophis major stub_2_16 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left; border-top-width: 2px;" valign="middle" align="left">HMA-VU46-2117754</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis major stub_2_17 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170818_01-2117748</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis major stub_2_18 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170814_02-2117746</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis major stub_2_19 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-SS170812_01-2117751</td></tr>
+    <tr style="border-style: none;"><td headers="Hydrophis major stub_2_20 Problem samples" class="gt_row gt_left" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: left;" valign="middle" align="left">HMA-WAM-R154980-2562264</td></tr>
   </tbody>
-  &#10;  
-</table>
+  &#10;</table>
 </div>
 
 ## Convert VCF to GDS
@@ -126,15 +125,15 @@ that there are some outlier samples, in addition to batch effects
 
 ### *Aipysurus laevis*
 
-<img src="variant-filtering_files/figure-gfm/pca-before-ala-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/pca-before-ala-1.png" alt="" width="100%" />
 
 ### *Hydrophis major*
 
-<img src="variant-filtering_files/figure-gfm/pca-before-hma-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/pca-before-hma-1.png" alt="" width="100%" />
 
 ### *Hydrophis stokesii*
 
-<img src="variant-filtering_files/figure-gfm/pca-before-hst-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/pca-before-hst-1.png" alt="" width="100%" />
 
 ## Explore LD and MAF
 
@@ -162,7 +161,7 @@ dataset can reach is 0.125.
 Below is a table that shows the minimum MAF we can calculate for each
 species-population pairing.
 
-<div id="oufnogzstz" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="jkrzxqfylw" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -283,8 +282,7 @@ species-population pairing.
 <td headers="HST  2N" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">2</td>
 <td headers="HST  MAF_threshold" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.50</td></tr>
   </tbody>
-  &#10;  
-</table>
+  &#10;</table>
 </div>
 
 We can see that some of our population sampling is patchy, meaning we
@@ -308,7 +306,7 @@ wanted to keep alleles found in only one individual per species. Again,
 using a threshold this low is probably not advisable (unless maybe doing
 SFS stuff) as singletons can be rife in samples that are poor quality.
 
-<div id="siquknbtqd" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="qepprcossy" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -332,8 +330,7 @@ SFS stuff) as singletons can be rife in samples that are poor quality.
 <td headers="2N" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">228</td>
 <td headers="MAF_threshold" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0044</td></tr>
   </tbody>
-  &#10;  
-</table>
+  &#10;</table>
 </div>
 
 ### Applying global MAF filter
@@ -344,18 +341,18 @@ monomorphic SNPs.
 
 #### *Aipysurus laevis*
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-1-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-1-1.png" alt="" width="100%" />
 
 #### *Hydrophis major*
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-2-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-2-1.png" alt="" width="100%" />
 
 #### *Hydrophis stokesii*
 
 We can see significant batch effects remain in *H. stokesii* even after
 applying our MAF filter.
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-3-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-3-1.png" alt="" width="100%" />
 
 ### LD
 
@@ -370,15 +367,15 @@ filter. We simply want to see what impact LD has on the PCA.
 
 #### *Aipysurus laevis*
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-5-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-5-1.png" alt="" width="100%" />
 
 #### *Hydrophis major*
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-6-1.png" alt="" width="100%" />
 
 #### *Hydrophis stokesii*
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-7-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-7-1.png" alt="" width="100%" />
 
 ## Filtering data: MAF $\leq0.01$ and LD $\leq$ 0.3
 
@@ -391,17 +388,17 @@ Below we apply a LD filter of 0.3, in addition to a MAF filter of 0.01.
 
 ### *Aipysurus laevis*
 
-<img src="variant-filtering_files/figure-gfm/pca-filtered-ala-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/pca-filtered-ala-1.png" alt="" width="100%" />
 
 ### *Hydrophis major*
 
-<img src="variant-filtering_files/figure-gfm/pca-filtered-hma-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/pca-filtered-hma-1.png" alt="" width="100%" />
 
 ### *H. stokesii*
 
 At the WA population level, batch effects are still an issue.
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-8-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-8-1.png" alt="" width="100%" />
 
 ### Removing batch effects from *H. stokesii*
 
@@ -410,13 +407,13 @@ We’ll remove SNPs that are heavily loaded to that PC and remove them.
 From the histogram of SNP loadings below, we can see that the tail
 starts to flatten around 0.04.
 
-<img src="variant-filtering_files/figure-gfm/remove-batch-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/remove-batch-1.png" alt="" width="100%" />
 
 We’re going to remove any SNPs with a loading $\geq0.04$ from the
 analysis. As we can see, this has done a good job of removing the batch
 effects, while only removing $\approx100$ SNPs.
 
-<img src="variant-filtering_files/figure-gfm/unnamed-chunk-9-1.png" width="100%" />
+<img src="variant-filtering_files/figure-gfm/unnamed-chunk-9-1.png" alt="" width="100%" />
 
 ## Write clean VCF files
 

@@ -1,6 +1,6 @@
 Diversity statistics
 ================
-2025-07-18
+2026-02-27
 
 - [Load VCF files](#load-vcf-files)
 - [Calculate within and between population diversity
@@ -16,8 +16,8 @@ This directory contains results relating to diversity statistics, both
 within and between populations. The statistics are generated from the
 filtered VCF files which have had the following filters applied:
 
-- MAF\$\$0.01
-- LD \$\$0.3
+- MAF $\leq$ 0.01
+- LD $\leq$ 0.3
 - For *H. stokesii* (WA), SNPs with PC1 loadings $\geq$ 0.04 (PC1 =
   batch effects)
 
@@ -81,7 +81,7 @@ table contains four relevant columns - weighted means for nucleotide
 diversity, observed heterozygosity, expected heterozygosity and
 F<sub>IS</sub>.
 
-<div id="glldrqyvvw" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<div id="ncmyoduwwt" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
   &#10;  <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false" style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: table; border-collapse: collapse; line-height: normal; margin-left: auto; margin-right: auto; color: #333333; font-size: 16px; font-weight: normal; font-style: normal; background-color: #FFFFFF; width: auto; border-top-style: solid; border-top-width: 2px; border-top-color: #A8A8A8; border-right-style: none; border-right-width: 2px; border-right-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #A8A8A8; border-left-style: none; border-left-width: 2px; border-left-color: #D3D3D3;" bgcolor="#FFFFFF">
   <thead style="border-style: none;">
     <tr class="gt_col_headings" style="border-style: none; border-top-style: solid; border-top-width: 2px; border-top-color: #D3D3D3; border-bottom-style: solid; border-bottom-width: 2px; border-bottom-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3;">
@@ -176,8 +176,7 @@ F<sub>IS</sub>.
 <td headers="HST  He" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.0933</td>
 <td headers="HST  Fis" class="gt_row gt_right" style="border-style: none; padding-top: 8px; padding-bottom: 8px; padding-left: 5px; padding-right: 5px; margin: 10px; border-top-style: solid; border-top-width: 1px; border-top-color: #D3D3D3; border-left-style: none; border-left-width: 1px; border-left-color: #D3D3D3; border-right-style: none; border-right-width: 1px; border-right-color: #D3D3D3; vertical-align: middle; overflow-x: hidden; text-align: right; font-variant-numeric: tabular-nums;" valign="middle" align="right">0.123</td></tr>
   </tbody>
-  &#10;  
-</table>
+  &#10;</table>
 </div>
 
 # Between population statistics
@@ -297,4 +296,4 @@ upper triangle is F<sub>ST</sub> and the lower is Nei’s genetic
 distance. These are two different pairwise measures that should be
 broadly similar.
 
-<img src="diversity_files/figure-gfm/unnamed-chunk-1-1.png" width="100%" />
+<img src="diversity_files/figure-gfm/unnamed-chunk-1-1.png" alt="" width="100%" />
