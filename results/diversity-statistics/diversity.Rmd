@@ -10,8 +10,8 @@ This directory contains results relating to diversity statistics, both within
 and between populations. The statistics are generated from the filtered VCF files
 which have had the following filters applied:
 
-- MAF$\leq$0.01
-- LD $\leq$0.3
+- MAF $\leq$ 0.01
+- LD $\leq$ 0.3
 - For *H. stokesii* (WA), SNPs with PC1 loadings $\geq$ 0.04 (PC1 = batch effects)
 
 Based off the PCA analyses, we're going to regroup some samples. Specifically,

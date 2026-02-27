@@ -246,7 +246,8 @@ pca_data <- gds_files |>
         pca_all <- snpgdsPCA(
             gds,
             autosome.only = FALSE,
-            maf = NaN,
+            maf = 0.01,
+            missing.rate = 0.1,
             num.thread = 4,
             verbose = FALSE
         )
@@ -262,7 +263,8 @@ pca_data <- gds_files |>
         pca_wa <- snpgdsPCA(
             gds,
             autosome.only = FALSE,
-            maf = NaN,
+            maf = 0.01,
+            missing.rate = 0.1,
             num.thread = 4,
             verbose = FALSE,
             sample.id = sample_ids_wa
@@ -299,7 +301,8 @@ pca_data_wa_hst <- gds_files |>
         pca_all <- snpgdsPCA(
             gds,
             autosome.only = FALSE,
-            maf = NaN,
+            maf = 0.01,
+            missing.rate = 0.1,
             num.thread = 4,
             verbose = FALSE
         )
@@ -315,7 +318,8 @@ pca_data_wa_hst <- gds_files |>
         pca_wa <- snpgdsPCA(
             gds,
             autosome.only = FALSE,
-            maf = NaN,
+            maf = 0.01,
+            missing.rate = 0.1,
             num.thread = 4,
             verbose = FALSE,
             sample.id = sample_ids_wa
