@@ -479,7 +479,8 @@ etable |>
     fmt_number(
         columns = 5:9,
         n_sigfig = 4
-    )
+    ) |>
+    as_raw_html()
 ```
 
 Plotting the table above looks like the following.

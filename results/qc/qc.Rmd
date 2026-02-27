@@ -83,6 +83,7 @@ data |>
     write_csv(file = here("results", "qc", "raw_trimmed_reads_bases.csv"))
 ```
 
+
 [bbduk]: https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/
 [kraken]: https://github.com/DerrickWood/kraken2/tree/master
 [fastp]: https://github.com/OpenGene/fastp
